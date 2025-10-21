@@ -1,0 +1,13 @@
+.venv
+.git
+*.gz
+*.md
+compose.yml
+docker-compose.yml
+compose.override.yml
+docker-compose.override.yml
+.github
+.vscode
+.pytest_cache
+.mypy_cache
+.coverage

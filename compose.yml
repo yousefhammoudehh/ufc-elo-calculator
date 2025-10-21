@@ -1,0 +1,51 @@
+---
+services:
+  olive-template-base:
+    build:
+      context: .
+    image: olive-template
+    container_name: olive-template-base
+    volumes:
+      - ${PWD}:/app
+    environment:
+      - DB_HOST=olive-template-postgres
+      - DB_NAME=postgres
+      - DB_PASSWORD=postgres
+      - DB_PORT=5432
+      - DB_USERNAME=postgres
+      - ENVIRONMENT=development
+      - LOG_LEVEL=DEBUG
+      - VIRTUAL_HOST=olive-template.docker
+    command: ['echo', 'I only exist to be extended']
+
+  olive-template:
+    extends: olive-template-base
+    container_name: olive-template
+    ports:
+      - 80
+    depends_on:
+      - olive-template-postgres
+    command: ['sh', 'bin/boot.sh']
+
+  olive-template-postgres:
+    image: postgres:17.1
+    container_name: olive-template-postgres
+    ports:
+      - 5432
+    environment:
+      - POSTGRES_DB=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - VIRTUAL_HOST=olive-template-postgres.docker
+
+  olive-template-test:
+    extends:
+      service: olive-template-base
+    container_name: olive-template-test
+    command: ['python', '-W', 'always::DeprecationWarning', '-m', 'pytest']
+
+  olive-template-lint:
+    extends: olive-template-base
+    container_name: olive-template-base-lint
+    command: >
+      /bin/sh -c "flake8 . && isort --check --diff ."
