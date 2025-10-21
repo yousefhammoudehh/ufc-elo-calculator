@@ -24,7 +24,6 @@ class AppBaseException(Exception):  # noqa: N818
         if self.field:
             kwargs['field'] = self.field
 
-        Template(self.message).safe_substitute(kwargs)
         if self.message:
             self.message = Template(self.message).safe_substitute(kwargs)
         if self.detail:

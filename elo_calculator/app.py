@@ -39,6 +39,6 @@ async def read_root() -> dict[str, str]:
     return {'Message': 'Welcome to the UFC ELO Calculator API'}
 
 
-@app.get('/heath')
+@app.get('/health')
 async def health_root() -> dict[str, str]:
     return {'Message': 'UFC ELO Calculator API is healthy'}

@@ -73,7 +73,7 @@ async def handle_default_not_found_exception(_: Request, exc: HTTPException) -> 
 
 async def handle_default_method_not_allowed_exception(_: Request, exc: HTTPException) -> JSONResponse:
     return get_method_not_allowed(
-        errors=[{'code': Errors.METHOD_NOT_ALLOWED_ERROR.code, 'message': Errors.FIELD_ERROR.message}]
+        errors=[{'code': Errors.METHOD_NOT_ALLOWED_ERROR.code, 'message': Errors.METHOD_NOT_ALLOWED_ERROR.message}]
     )
 
 

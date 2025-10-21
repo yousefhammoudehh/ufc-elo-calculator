@@ -307,4 +307,4 @@ class BaseRepository[T: BaseEntityBase]:
         return func.json_build_object(*args)
 
     def _get_cache_key(self, method: str | None = None) -> str:
-        return f'{self.cache_prefix}:{f":{method}" if method else ""}'
+        return f'{self.cache_prefix}:{method}' if method else self.cache_prefix
