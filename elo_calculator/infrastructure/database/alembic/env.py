@@ -59,8 +59,13 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
+    # Override the sqlalchemy.url from alembic.ini with our custom URL
+    configuration = config.get_section(config.config_ini_section, {})
+    # Replace asyncpg with psycopg (sync driver) for migrations
+    configuration['sqlalchemy.url'] = target_url.replace('postgresql+asyncpg://', 'postgresql://')
+    
     connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
+        configuration,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )

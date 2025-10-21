@@ -9,3 +9,12 @@ class StrEnum(str, Enum):
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return str(self.value)
+
+
+class BoutResult(StrEnum):
+    """Bout result types for pre-UFC fights."""
+
+    WIN = 'win'
+    LOSS = 'loss'
+    DRAW = 'draw'
+    NO_CONTEST = 'nc'
