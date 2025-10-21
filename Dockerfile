@@ -1,41 +1,39 @@
-# syntax=docker/dockerfile:1.3
-FROM python:3.13-slim AS base
+FROM python:3.13-alpine AS builder
 
-ENV PATH=/opt/local/bin:$PATH \
-    PIP_PREFIX=/opt/local \
-    PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PIP_NO_CACHE_DIR=off  
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1
+ENV POETRY_VERSION=2.1.3
+ENV POETRY_VIRTUALENVS_CREATE=false
 
-
-FROM base AS build
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    libpq-dev \
-    make \
-    build-essential \
-    curl \
-    libxml2-dev \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-
+RUN apk add --no-cache gcc musl-dev libffi-dev postgresql-dev build-base
+RUN pip install "poetry==${POETRY_VERSION}"
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY pyproject.toml poetry.lock* ./
 
-FROM base AS deploy
+RUN poetry install --only main --no-interaction --no-ansi  --no-root
 
-ENV PATH=/opt/local/bin:$PATH \
-    PYTHONPATH=/opt/local/lib/python3.13/site-packages:/app
+###########
+###########
+FROM python:3.13-alpine
 
-COPY --from=build /opt/local /opt/local
-COPY --from=build /usr/lib/x86_64-linux-gnu/ /lib/x86_64-linux-gnu/ /usr/lib/
+ARG ENVIRONMENT
+ENV ENVIRONMENT=${ENVIRONMENT}
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1 
+
+RUN apk add --no-cache libpq bash
 
 WORKDIR /app
-COPY . /app
+
+COPY --from=builder /usr/local/lib/python3.13/site-packages /usr/local/lib/python3.13/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+COPY . .
 
 EXPOSE 80
 STOPSIGNAL SIGINT

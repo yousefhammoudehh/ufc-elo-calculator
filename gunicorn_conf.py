@@ -1,5 +1,5 @@
-from olive_template.configs.env import ENVIRONMENT, LOG_LEVEL
-from olive_template.configs.log import LOG_DATE_FORMAT, LOG_MESSAGE_FORMAT
+from elo_calculator.configs.env import ENVIRONMENT, LOG_LEVEL
+from elo_calculator.configs.log import LOG_DATE_FORMAT, LOG_MESSAGE_FORMAT
 
 is_dev = ENVIRONMENT == 'development'
 
@@ -14,29 +14,10 @@ accesslog = '-' if worker_class else None
 
 logconfig_dict = {
     'version': 1,
-    'formatters': {
-        'generic': {
-            'format': LOG_MESSAGE_FORMAT,
-            'datefmt': LOG_DATE_FORMAT,
-            'class': 'logging.Formatter',
-        },
-    },
-    'handlers': {
-        'console': {
-            'class': 'logging.StreamHandler',
-            'formatter': 'generic',
-            'stream': 'ext://sys.stdout',
-        },
-    },
+    'formatters': {'generic': {'format': LOG_MESSAGE_FORMAT, 'datefmt': LOG_DATE_FORMAT, 'class': 'logging.Formatter'}},
+    'handlers': {'console': {'class': 'logging.StreamHandler', 'formatter': 'generic', 'stream': 'ext://sys.stdout'}},
     'loggers': {
-        'root': {
-            'level': LOG_LEVEL,
-            'handlers': ['console']
-        },
-        'gunicorn.error': {
-            'level': LOG_LEVEL,
-            'handlers': ['console'],
-            'propagate': False,
-        },
+        'root': {'level': LOG_LEVEL, 'handlers': ['console']},
+        'gunicorn.error': {'level': LOG_LEVEL, 'handlers': ['console'], 'propagate': False},
     },
 }
