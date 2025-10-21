@@ -2,6 +2,7 @@ from sqlalchemy import Boolean, CheckConstraint, Column, Date, ForeignKey, Integ
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import text
 
+from elo_calculator.domain.shared.enumerations import FightOutcome
 from elo_calculator.infrastructure.database.engine import metadata
 
 # 1. Promotions
@@ -31,7 +32,6 @@ events = Table(
     metadata,
     Column('event_id', UUID(as_uuid=False), primary_key=True, server_default=text('gen_random_uuid()')),
     Column('event_date', Date, nullable=False),
-    Column('promotion_id', UUID(as_uuid=False), ForeignKey('promotions.promotion_id')),
     Column('name', String),
 )
 
@@ -54,8 +54,7 @@ bout_participants = Table(
     metadata,
     Column('bout_id', String(16), ForeignKey('bouts.bout_id'), primary_key=True),
     Column('fighter_id', String(16), ForeignKey('fighters.fighter_id'), primary_key=True),
-    Column('is_winner', Boolean),
-    Column('is_draw', Boolean),
+    Column('outcome', String, CheckConstraint(f'outcome IN {tuple(o.value for o in FightOutcome)}'), nullable=False),
     Column('kd', Integer),
     Column('sig_strikes', Integer),
     Column('sig_strikes_thrown', Integer),
@@ -97,5 +96,5 @@ pre_ufc_bouts = Table(
     Column('bout_id', UUID(as_uuid=False), primary_key=True, server_default=text('gen_random_uuid()')),
     Column('fighter_id', String(16), ForeignKey('fighters.fighter_id')),
     Column('promotion_id', UUID(as_uuid=False), ForeignKey('promotions.promotion_id')),
-    Column('result', String, CheckConstraint("result IN ('win', 'loss', 'draw', 'nc')")),
+    Column('result', String, CheckConstraint(f'result IN {tuple(r.value for r in FightOutcome)}')),
 )

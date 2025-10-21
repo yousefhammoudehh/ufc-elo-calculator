@@ -38,9 +38,7 @@ def upgrade() -> None:
     op.create_table('events',
     sa.Column('event_id', sa.UUID(as_uuid=False), server_default=sa.text('gen_random_uuid()'), nullable=False),
     sa.Column('event_date', sa.Date(), nullable=False),
-    sa.Column('promotion_id', sa.UUID(as_uuid=False), nullable=True),
     sa.Column('name', sa.String(), nullable=True),
-    sa.ForeignKeyConstraint(['promotion_id'], ['promotions.promotion_id'], ),
     sa.PrimaryKeyConstraint('event_id')
     )
     op.create_table('pre_ufc_bouts',
@@ -48,6 +46,7 @@ def upgrade() -> None:
     sa.Column('fighter_id', sa.String(length=16), nullable=True),
     sa.Column('promotion_id', sa.UUID(as_uuid=False), nullable=True),
     sa.Column('result', sa.String(), nullable=True),
+    sa.CheckConstraint("result IN ('win', 'loss', 'draw', 'nc')"),
     sa.ForeignKeyConstraint(['fighter_id'], ['fighters.fighter_id'], ),
     sa.ForeignKeyConstraint(['promotion_id'], ['promotions.promotion_id'], ),
     sa.PrimaryKeyConstraint('bout_id')
@@ -66,8 +65,8 @@ def upgrade() -> None:
     op.create_table('bout_participants',
     sa.Column('bout_id', sa.String(length=16), nullable=False),
     sa.Column('fighter_id', sa.String(length=16), nullable=False),
-    sa.Column('is_winner', sa.Boolean(), nullable=True),
-    sa.Column('is_draw', sa.Boolean(), nullable=True),
+    sa.Column('outcome', sa.String(), nullable=False),
+    sa.CheckConstraint("outcome IN ('win', 'loss', 'draw', 'nc')"),
     sa.Column('kd', sa.Integer(), nullable=True),
     sa.Column('sig_strikes', sa.Integer(), nullable=True),
     sa.Column('sig_strikes_thrown', sa.Integer(), nullable=True),
@@ -89,6 +88,7 @@ def upgrade() -> None:
     sa.Column('elo_after', sa.Integer(), nullable=True),
     sa.Column('ufc_fights_before', sa.Integer(), nullable=True),
     sa.Column('days_since_last_fight', sa.Integer(), nullable=True),
+    sa.CheckConstraint("outcome IN ('win', 'loss', 'draw', 'nc')"),
     sa.ForeignKeyConstraint(['bout_id'], ['bouts.bout_id'], ),
     sa.ForeignKeyConstraint(['fighter_id'], ['fighters.fighter_id'], ),
     sa.PrimaryKeyConstraint('bout_id', 'fighter_id')
