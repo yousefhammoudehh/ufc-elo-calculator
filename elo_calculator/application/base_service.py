@@ -1,8 +1,8 @@
-from abc import ABC
+class BaseService:
+    """Base service placeholder for shared service utilities.
 
-from elo_calculator.domain.user.entity import User
+    Previously inherited from ABC without abstract methods triggering lint B024.
+    Extend with common helpers as domain evolves (e.g., logging, tracing).
+    """
 
-
-class BaseService(ABC):
-    def __init__(self, user: User):
-        self.user = user
+    pass

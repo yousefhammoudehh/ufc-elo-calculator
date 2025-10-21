@@ -1,5 +1,6 @@
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator, Optional, Self
+from typing import Self
 
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
@@ -16,8 +17,7 @@ class UnitOfWork:
         await self.connection.begin()
         return self
 
-    async def __aexit__(self, exc_type: Optional[type], exc_val: Optional[Exception], exc_tb: Optional[object]) -> None:
-
+    async def __aexit__(self, exc_type: type | None, exc_val: Exception | None, exc_tb: object | None) -> None:
         if exc_type:
             await self.rollback()
         else:
@@ -34,6 +34,6 @@ class UnitOfWork:
 
 
 @asynccontextmanager
-async def get_uow() -> AsyncGenerator[UnitOfWork, None]:
+async def get_uow() -> AsyncGenerator[UnitOfWork]:
     async with UnitOfWork(engine) as uow:
         yield uow

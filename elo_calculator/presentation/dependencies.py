@@ -1,21 +1,20 @@
-from typing import Any, Callable, Type, TypeVar
-
-from fastapi import Depends, Request
+from collections.abc import Awaitable, Callable
 
 from elo_calculator.application.base_service import BaseService
 from elo_calculator.configs.log import get_logger
-from elo_calculator.domain.user.entity import User
-
-T = TypeVar("T", bound=BaseService)
 
 logger = get_logger()
 
 
-def get_user(request: Request) -> Any:
-    return request.state.user
+def get_service[T: BaseService](service_class: type[T]) -> Callable[[], Awaitable[T]]:
+    """Factory returning a FastAPI dependency that injects the requested service.
 
+    Behavior:
+      * For subclasses of InternalBaseService: no auth required (used by /internal/ routes behind HMAC middleware).
+      * For subclasses of BaseService: bearer token is required and decoded into AuthContext.
+    """
 
-def get_service(service_class: Type[T]) -> Callable[..., Any] | None:
-    def service_dependency(user: User = Depends(get_user)) -> T:
-        return service_class(user=user)
+    async def service_dependency() -> T:
+        return service_class()
+
     return service_dependency

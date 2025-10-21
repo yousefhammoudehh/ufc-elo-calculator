@@ -10,29 +10,11 @@ app = FastAPI(title='UFC ELO Calculator API')
 register_exception_handlers(app)
 
 
-
-
-
 def custom_openapi() -> dict[str, Any]:
     if app.openapi_schema:
         return app.openapi_schema
 
     openapi_schema = get_openapi(title='UFC ELO Calculator API', version='0.0.1', routes=app.routes)
-    openapi_schema['components']['securitySchemes'] = {
-        'AccessAndIdTokens': {
-            'type': 'apiKey',
-            'in': 'header',
-            'name': 'x-access-token',
-            'description': 'Access token for authentication',
-        },
-        'IdToken': {
-            'type': 'apiKey',
-            'in': 'header',
-            'name': 'x-id-token',
-            'description': 'ID token for user identification',
-        }
-    }
-    openapi_schema['security'] = [{'AccessAndIdTokens': []}, {'IdToken': []}]
 
     for path in openapi_schema['paths'].values():
         for method, method_data in path.items():
@@ -42,10 +24,7 @@ def custom_openapi() -> dict[str, Any]:
                         'name': 'params',
                         'in': 'query',
                         'required': False,
-                        'schema': {
-                            'type': 'object',
-                            'additionalProperties': {'type': 'string'},
-                        },
+                        'schema': {'type': 'object', 'additionalProperties': {'type': 'string'}},
                     }
                 )
     app.openapi_schema = openapi_schema

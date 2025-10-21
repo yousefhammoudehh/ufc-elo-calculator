@@ -1,11 +1,15 @@
+# ruff: noqa: ARG001
 import json
-from datetime import datetime
-from typing import Any, List, Optional, Type, TypeVar, Union, cast
+from collections.abc import Sequence
+from datetime import date, datetime, time, timedelta
+from typing import Any, cast
 from uuid import UUID
 
 from fastapi import status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+
+from elo_calculator.utils.date_parser import date_to_iso_str, datetime_to_iso_str, time_to_str, timedelta_to_iso_str
 
 
 class CustomJSONEncoder(json.JSONEncoder):
@@ -13,7 +17,14 @@ class CustomJSONEncoder(json.JSONEncoder):
         if isinstance(obj, UUID):
             return str(obj)
         if isinstance(obj, datetime):
-            return obj.strftime('%Y-%m-%dT%H:%M:%S.%f') + 'Z'
+            return datetime_to_iso_str(obj)
+        if isinstance(obj, date):
+            return date_to_iso_str(obj)
+        if isinstance(obj, time):
+            return time_to_str(obj)
+        if isinstance(obj, timedelta):
+            return timedelta_to_iso_str(obj)
+
         return super().default(obj)
 
 
@@ -22,71 +33,83 @@ class CustomJSONResponse(JSONResponse):
         return json.dumps(content, cls=CustomJSONEncoder).encode('utf-8')
 
 
-T = TypeVar('T')  # Data type
-
-DataType = Optional[Union[BaseModel, List[BaseModel], dict[str, Any]]]
+DataType = BaseModel | Sequence[BaseModel] | dict[str, Any] | Sequence[dict[str, Any]] | None
 
 
-def get_response(code: int,
-                 message: str,
-                 data: DataType = None,
-                 errors: Optional[dict[str, Any] | list[dict[str, Any]] | str] = None,
-                 extra: Optional[dict[str, Any]] = None,
-                 ) -> CustomJSONResponse:
-    serialized_data: Optional[Union[dict[str, Any], list[dict[str, Any]]]] = None
+def get_response[T, B: DataType](
+    status_code: int,
+    message: str,
+    data: DataType = None,
+    errors: dict[str, Any] | list[dict[str, Any]] | str | None = None,
+    extra: dict[str, Any] | None = None,
+) -> CustomJSONResponse:
+    serialized_data: dict[str, Any] | list[dict[str, Any]] | None = None
 
     if data is not None:
-        if isinstance(data, list):
-            serialized_data = [item.model_dump() if isinstance(item, BaseModel)else item for item in data]
+        if isinstance(data, Sequence) and not isinstance(data, str):
+            serialized_data = [item.model_dump() if isinstance(item, BaseModel) else item for item in data]
         elif isinstance(data, BaseModel):
             serialized_data = data.model_dump()
         elif isinstance(data, dict):
             serialized_data = data
-    content: dict[str, Any] = {'message': message}
+    content: dict[str, Any] = {'status_code': status_code, 'message': message}
     if serialized_data is not None:
         content['data'] = serialized_data
     if errors:
         content['errors'] = errors
     content.update(extra or {})
-    return CustomJSONResponse(status_code=code, content=content)
+    return CustomJSONResponse(status_code=status_code, content=content)
 
 
-def get_ok(data: DataType, extra: Optional[dict[str, Any]] = {}, message: str = 'Ok',
-           return_type: Optional[Type[T]] = None) -> T:
+def get_ok[T](
+    data: DataType, extra: dict[str, Any] | None = None, message: str = 'Ok', return_type: type[T] | None = None
+) -> T:
     return cast(T, get_response(status.HTTP_200_OK, message, data, None, extra))
 
 
-def get_bad_request(message: str = 'Bad request',
-                    errors: Optional[dict[str, Any] | list[dict[str, Any]] | str] = None,
-                    return_type: Optional[Type[T]] = None) -> T:
+def get_bad_request[T](
+    message: str = 'Bad Request',
+    errors: dict[str, Any] | list[dict[str, Any]] | str | None = None,
+    return_type: type[T] | None = None,
+) -> T:
     return cast(T, get_response(status.HTTP_400_BAD_REQUEST, message, None, errors))
 
 
-def get_unauthorized(message: str = 'Unauthorized action',
-                     errors: Optional[dict[str, Any] | list[dict[str, Any]] | str] = None,
-                     return_type: Optional[Type[T]] = None) -> T:
+def get_unauthorized[T](
+    message: str = 'Unauthorized',
+    errors: dict[str, Any] | list[dict[str, Any]] | str | None = None,
+    return_type: type[T] | None = None,
+) -> T:
     return cast(T, get_response(status.HTTP_401_UNAUTHORIZED, message, None, errors))
 
 
-def get_forbidden(message: str = 'Forbidden: access denied',
-                  errors: Optional[dict[str, Any] | list[dict[str, Any]] | str] = None,
-                  return_type: Optional[Type[T]] = None) -> T:
+def get_forbidden[T](
+    message: str = 'Forbidden',
+    errors: dict[str, Any] | list[dict[str, Any]] | str | None = None,
+    return_type: type[T] | None = None,
+) -> T:
     return cast(T, get_response(status.HTTP_403_FORBIDDEN, message, None, errors))
 
 
-def get_not_found(message: str = 'Data not found',
-                  errors: Optional[dict[str, Any] | list[dict[str, Any]] | str] = None,
-                  return_type: Optional[Type[T]] = None) -> T:
+def get_not_found[T](
+    message: str = 'Not Found',
+    errors: dict[str, Any] | list[dict[str, Any]] | str | None = None,
+    return_type: type[T] | None = None,
+) -> T:
     return cast(T, get_response(status.HTTP_404_NOT_FOUND, message, errors=errors))
 
 
-def get_method_not_allowed(message: str = 'Method not allowed',
-                           errors: Optional[dict[str, Any] | list[dict[str, Any]] | str] = None,
-                           return_type: Optional[Type[T]] = None) -> T:
+def get_method_not_allowed[T](
+    message: str = 'Method Not Allowed',
+    errors: dict[str, Any] | list[dict[str, Any]] | str | None = None,
+    return_type: type[T] | None = None,
+) -> T:
     return cast(T, get_response(status.HTTP_405_METHOD_NOT_ALLOWED, message, None, errors))
 
 
-def get_server_error(message: str = 'Internal server error',
-                     errors: Optional[dict[str, Any] | list[dict[str, Any]] | str] = None,
-                     return_type: Optional[Type[T]] = None) -> T:
+def get_server_error[T](
+    message: str = 'Internal Server Error',
+    errors: dict[str, Any] | list[dict[str, Any]] | str | None = None,
+    return_type: type[T] | None = None,
+) -> T:
     return cast(T, get_response(status.HTTP_500_INTERNAL_SERVER_ERROR, message, None, errors))

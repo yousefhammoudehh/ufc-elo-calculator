@@ -1,10 +1,11 @@
 import inspect
 import random
 import time
+from collections.abc import Callable, Iterable, Mapping
 from datetime import datetime
 from functools import partial
 from http import HTTPStatus
-from typing import Any, Callable, Iterable, Mapping, Optional, Union
+from typing import Any
 
 from httpx import AsyncBaseTransport, BaseTransport, Client, Headers, HTTPTransport, Request, Response
 
@@ -17,14 +18,14 @@ HTTPX_RETRY_POLICY: dict[str, Any] = {
     'backoff_factor': 1,
     'retry_status_codes': [424, 429, 500, 502, 503, 504],
     'retryable_methods': ['DELETE', 'GET', 'HEAD', 'POST', 'PUT', 'PATCH'],
-    'respect_retry_after_header': True
+    'respect_retry_after_header': True,
 }
 
 DEFAULT_TIMEOUT = 5
 
 
 class RetryTransport(AsyncBaseTransport, BaseTransport):
-    '''
+    """
     A custom HTTP transport that automatically retries requests using an exponential backoff
     strategy for specific HTTP status codes and request methods.
     Args:
@@ -62,7 +63,7 @@ class RetryTransport(AsyncBaseTransport, BaseTransport):
         _max_backoff_wait (float): The maximum time to wait between retries in seconds.
         _callback (Callable[..., Any], optional): Plugable function that if provided will be
             called at retrying time.
-    '''
+    """
 
     RETRYABLE_METHODS = frozenset(['DELETE', 'GET', 'HEAD', 'POST', 'PUT'])
     RETRYABLE_STATUS_CODES = frozenset(
@@ -76,8 +77,9 @@ class RetryTransport(AsyncBaseTransport, BaseTransport):
         ]
     )
     MAX_BACKOFF_WAIT = 60
+    MAX_JITTER_RATIO = 0.5  # Upper bound for jitter validation
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - constructor requires these parameters
         self,
         wrapped_transport: BaseTransport,
         max_attempts: int = 10,
@@ -85,11 +87,11 @@ class RetryTransport(AsyncBaseTransport, BaseTransport):
         backoff_factor: float = 1,
         jitter_ratio: float = 0.1,
         respect_retry_after_header: bool = True,
-        retryable_methods: Optional[Iterable[str]] = None,
-        retry_status_codes: Optional[Iterable[int]] = None,
-        callback: Optional[Callable[..., Any]] = None,
+        retryable_methods: Iterable[str] | None = None,
+        retry_status_codes: Iterable[int] | None = None,
+        callback: Callable[..., Any] | None = None,
     ) -> None:
-        '''
+        """
         Initializes the instance of RetryTransport class with the given parameters.
         Args:
             wrapped_transport BaseTransport:
@@ -120,32 +122,28 @@ class RetryTransport(AsyncBaseTransport, BaseTransport):
             callback (Callable[..., Any], optional):
                 Plugable function that if provided will be called at retrying time.
                 Defaults to None.
-        '''
+        """
         self._wrapped_transport = wrapped_transport
-        if jitter_ratio < 0 or jitter_ratio > 0.5:
-            raise ValueError(
-                f'Jitter ratio should be between 0 and 0.5, actual {jitter_ratio}'
-            )
+        if jitter_ratio < 0 or jitter_ratio > self.MAX_JITTER_RATIO:
+            raise ValueError(f'Jitter ratio should be between 0 and {self.MAX_JITTER_RATIO}, actual {jitter_ratio}')
 
         self._max_attempts = max_attempts
         self._backoff_factor = backoff_factor
         self._respect_retry_after_header = respect_retry_after_header
-        self._retryable_methods = frozenset(retryable_methods) if retryable_methods \
-            else self.RETRYABLE_METHODS
-        self._retry_status_codes = frozenset(retry_status_codes) if retry_status_codes \
-            else self.RETRYABLE_STATUS_CODES
+        self._retryable_methods = frozenset(retryable_methods) if retryable_methods else self.RETRYABLE_METHODS
+        self._retry_status_codes = frozenset(retry_status_codes) if retry_status_codes else self.RETRYABLE_STATUS_CODES
         self._jitter_ratio = jitter_ratio
         self._max_backoff_wait = max_backoff_wait
         self._callback = callback
 
     def handle_request(self, request: Request) -> Response:
-        '''
+        """
         Sends an HTTP request, possibly with retries.
         Args:
             request (Request): The request to send.
         Returns:
             Response: The response received.
-        '''
+        """
         transport: BaseTransport = self._wrapped_transport
         if request.method in self._retryable_methods:
             send_method = partial(transport.handle_request)
@@ -155,18 +153,16 @@ class RetryTransport(AsyncBaseTransport, BaseTransport):
         return response
 
     def close(self) -> None:
-        '''
+        """
         Closes the underlying HTTP transport, terminating all outstanding connections and
         rejecting any further requests.
         This should be called before the object is dereferenced, to ensure that connections are
         properly cleaned up.
-        '''
+        """
         self._wrapped_transport.close()
 
-    def _calculate_sleep(
-        self, attempts_made: int, headers: Union[Headers, Mapping[str, str]]
-    ) -> Any:
-        '''
+    def _calculate_sleep(self, attempts_made: int, headers: Headers | Mapping[str, str]) -> Any:
+        """
         Retry-After
         The Retry-After response HTTP header indicates how long the user agent should wait before
         making a follow-up request. There are three main cases this header is used:
@@ -176,16 +172,14 @@ class RetryTransport(AsyncBaseTransport, BaseTransport):
             before making a new request.
         - When sent with a redirect response, such as 301 (Moved Permanently), this indicates the
             minimum time that the user agent is asked to wait before issuing the redirected request.
-        '''
+        """
         retry_after_header = (headers.get('Retry-After') or '').strip()
         if self._respect_retry_after_header and retry_after_header:
             if retry_after_header.isdigit():
                 return float(retry_after_header)
 
             try:
-                parsed_date = datetime.fromisoformat(
-                    retry_after_header
-                ).astimezone()  # converts to local time
+                parsed_date = datetime.fromisoformat(retry_after_header).astimezone()  # converts to local time
                 diff = (parsed_date - datetime.now().astimezone()).total_seconds()
                 if diff > 0:
                     return min(diff, self._max_backoff_wait)
@@ -197,11 +191,7 @@ class RetryTransport(AsyncBaseTransport, BaseTransport):
         total_backoff = backoff + jitter
         return min(total_backoff, self._max_backoff_wait)
 
-    def _retry_operation(
-        self,
-        request: Request,
-        send_method: Callable[..., Response],
-    ) -> Response:
+    def _retry_operation(self, request: Request, send_method: Callable[..., Response]) -> Response:
         remaining_attempts = self._max_attempts
         attempts_made = 0
         response = None
@@ -213,28 +203,24 @@ class RetryTransport(AsyncBaseTransport, BaseTransport):
                     f'Failed response status code: {response.status_code}'
                 )
                 if self._callback:
-                    if 'headers' and 'status_code' in \
-                            inspect.getfullargspec(self._callback).args:
-                        self._callback(headers=request.headers,
-                                       status_code=response.status_code)
+                    if 'headers' and 'status_code' in inspect.getfullargspec(self._callback).args:
+                        self._callback(headers=request.headers, status_code=response.status_code)
                     else:
                         self._callback()
                 time.sleep(self._calculate_sleep(attempts_made, response.headers))
             response = send_method(request)
-            if (
-                remaining_attempts < 1
-                or response.status_code not in self._retry_status_codes
-            ):
+            if remaining_attempts < 1 or response.status_code not in self._retry_status_codes:
                 return response
             response.close()
             attempts_made += 1
             remaining_attempts -= 1
 
 
-def get_client(retry_policy: Optional[dict[str, Any]] = None,
-               callback: Optional[Callable[..., Any]] = None,
-               timeout: Optional[float] = DEFAULT_TIMEOUT) -> Client:
+def get_client(
+    retry_policy: dict[str, Any] | None = None,
+    callback: Callable[..., Any] | None = None,
+    timeout: float | None = DEFAULT_TIMEOUT,
+) -> Client:
     retry_policy = retry_policy or HTTPX_RETRY_POLICY
     transport = RetryTransport(HTTPTransport(), **retry_policy, callback=callback)
-    client = Client(transport=transport, timeout=timeout)
-    return client
+    return Client(transport=transport, timeout=timeout)
