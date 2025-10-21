@@ -6,8 +6,8 @@
 set -ev
 
 cp requirements.{top,txt}
-docker-compose build olive-template
-docker-compose run --rm --no-deps olive-template sh -c 'pip freeze > requirements.txt'
+docker-compose build ufc-elo-calculator
+docker-compose run --rm --no-deps ufc-elo-calculator sh -c 'pip freeze > requirements.txt'
 sed -nE 's/(^[^#].*egg=(.*))/s%\2=.*%\1%/p' requirements.top >/tmp/github-urls
 sed -f /tmp/github-urls requirements.txt >requirements.new
 mv requirements.{new,txt}

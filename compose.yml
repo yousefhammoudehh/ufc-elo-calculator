@@ -1,51 +1,50 @@
 ---
 services:
-  olive-template-base:
+  ufc-elo-calculator-base:
     build:
       context: .
-    image: olive-template
-    container_name: olive-template-base
+    image: ufc-elo-calculator
+    container_name: ufc-elo-calculator-base
     volumes:
       - ${PWD}:/app
     environment:
-      - DB_HOST=olive-template-postgres
+      - DB_HOST=ufc-elo-calculator-postgres
       - DB_NAME=postgres
       - DB_PASSWORD=postgres
       - DB_PORT=5432
       - DB_USERNAME=postgres
       - ENVIRONMENT=development
       - LOG_LEVEL=DEBUG
-      - VIRTUAL_HOST=olive-template.docker
+      - VIRTUAL_HOST=ufc-elo-calculator.docker
     command: ['echo', 'I only exist to be extended']
 
-  olive-template:
-    extends: olive-template-base
-    container_name: olive-template
+  ufc-elo-calculator:
+    extends: ufc-elo-calculator-base
+    container_name: ufc-elo-calculator
     ports:
-      - 80
+      - "80:80"
     depends_on:
-      - olive-template-postgres
+      - ufc-elo-calculator-postgres
     command: ['sh', 'bin/boot.sh']
 
-  olive-template-postgres:
+  ufc-elo-calculator-postgres:
     image: postgres:17.1
-    container_name: olive-template-postgres
+    container_name: ufc-elo-calculator-postgres
     ports:
-      - 5432
+      - "5432:5432"
     environment:
       - POSTGRES_DB=postgres
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
-      - VIRTUAL_HOST=olive-template-postgres.docker
+      - VIRTUAL_HOST=ufc-elo-calculator-postgres.docker
 
-  olive-template-test:
-    extends:
-      service: olive-template-base
-    container_name: olive-template-test
+  ufc-elo-calculator-test:
+    extends: ufc-elo-calculator-base
+    container_name: ufc-elo-calculator-test
     command: ['python', '-W', 'always::DeprecationWarning', '-m', 'pytest']
 
-  olive-template-lint:
-    extends: olive-template-base
-    container_name: olive-template-base-lint
+  ufc-elo-calculator-lint:
+    extends: ufc-elo-calculator-base
+    container_name: ufc-elo-calculator-base-lint
     command: >
       /bin/sh -c "flake8 . && isort --check --diff ."

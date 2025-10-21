@@ -1,5 +1,5 @@
-from olive_template.configs.env import ENVIRONMENT, LOG_LEVEL
-from olive_template.configs.log import LOG_DATE_FORMAT, LOG_MESSAGE_FORMAT
+from elo_calculator.configs.env import ENVIRONMENT, LOG_LEVEL
+from elo_calculator.configs.log import LOG_DATE_FORMAT, LOG_MESSAGE_FORMAT
 
 is_dev = ENVIRONMENT == 'development'
 
