@@ -11,8 +11,8 @@ class StrEnum(str, Enum):
         return str(self.value)
 
 
-class BoutResult(StrEnum):
-    """Bout result types for pre-UFC fights."""
+class FightOutcome(StrEnum):
+    """Fight outcome types for UFC bouts."""
 
     WIN = 'win'
     LOSS = 'loss'
