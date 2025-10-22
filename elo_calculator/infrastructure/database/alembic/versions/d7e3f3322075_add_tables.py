@@ -38,7 +38,7 @@ def upgrade() -> None:
     op.create_table('events',
     sa.Column('event_id', sa.UUID(as_uuid=False), server_default=sa.text('gen_random_uuid()'), nullable=False),
     sa.Column('event_date', sa.Date(), nullable=False),
-    sa.Column('name', sa.String(), nullable=True),
+    sa.Column('event_link', sa.String(), nullable=True),
     sa.PrimaryKeyConstraint('event_id')
     )
     op.create_table('pre_ufc_bouts',

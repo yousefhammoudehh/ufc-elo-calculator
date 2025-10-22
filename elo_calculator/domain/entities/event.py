@@ -11,4 +11,4 @@ class Event(BaseEntityBase):
 
     event_id: UUID
     event_date: date
-    name: str | None = None
+    event_link: str | None = None

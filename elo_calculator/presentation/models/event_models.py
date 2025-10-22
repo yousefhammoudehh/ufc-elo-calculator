@@ -6,15 +6,15 @@ from elo_calculator.presentation.models.shared import DataModel
 
 class EventCreateRequest(DataModel):
     event_date: date
-    name: str | None = None
+    event_link: str | None = None
 
 
 class EventUpdateRequest(DataModel):
     event_date: date | None = None
-    name: str | None = None
+    event_link: str | None = None
 
 
 class EventResponse(DataModel):
     event_id: UUID
     event_date: date
-    name: str | None = None
+    event_link: str | None = None

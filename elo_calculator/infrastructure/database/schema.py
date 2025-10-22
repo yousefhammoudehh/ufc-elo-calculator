@@ -32,7 +32,7 @@ events = Table(
     metadata,
     Column('event_id', UUID(as_uuid=False), primary_key=True, server_default=text('gen_random_uuid()')),
     Column('event_date', Date, nullable=False),
-    Column('name', String),
+    Column('event_link', String),
 )
 
 # 4. Bouts

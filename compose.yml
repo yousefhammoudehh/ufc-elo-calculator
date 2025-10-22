@@ -6,6 +6,7 @@ services:
     container_name: ufc-elo-calculator-base
     volumes:
       - ${PWD}:/app
+      - ../seeder_data:/app/seeder_data:ro
     environment:
       - DB_HOST=ufc-elo-calculator-postgres
       - DB_NAME=postgres
