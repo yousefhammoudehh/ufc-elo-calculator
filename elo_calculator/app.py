@@ -2,6 +2,7 @@ from typing import Any
 
 from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
+
 from elo_calculator.configs.lifespan import lifespan
 from elo_calculator.presentation.routers import bout_participants as bout_participants_router
 from elo_calculator.presentation.routers import bouts as bouts_router
@@ -12,7 +13,7 @@ from elo_calculator.presentation.routers import pre_ufc_bouts as pre_ufc_bouts_r
 from elo_calculator.presentation.routers import promotions as promotions_router
 from elo_calculator.presentation.utils.exception_handlers import register_exception_handlers
 
-app = FastAPI(title='UFC ELO Calculator API', lifespan = lifespan)
+app = FastAPI(title='UFC ELO Calculator API', lifespan=lifespan)
 
 register_exception_handlers(app)
 app.include_router(events_router.router)

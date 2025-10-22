@@ -9,7 +9,7 @@ from elo_calculator.infrastructure.repositories.unit_of_work import UnitOfWork, 
 
 class PromotionService(BaseService):
     @with_uow
-    async def list(self, uow: UnitOfWork) -> list[Promotion]:
+    async def get_all(self, uow: UnitOfWork) -> list[Promotion]:
         return await uow.promotions.get_all()
 
     @with_uow

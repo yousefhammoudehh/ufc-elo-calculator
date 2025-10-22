@@ -14,8 +14,8 @@ router = APIRouter(prefix='/promotions', tags=['promotions'])
 async def list_promotions(
     service: PromotionService = Depends(get_service(PromotionService)),
 ) -> MainResponse[list[PromotionResponse]]:
-    promotions = await service.list()
-    return get_ok[MainResponse[list[PromotionResponse]]](PromotionResponse.from_entity_list(promotions))
+    promotions = await service.get_all()
+    return get_ok(PromotionResponse.from_entity_list(promotions))
 
 
 @router.post('/', response_model=MainResponse[PromotionResponse])
@@ -24,4 +24,4 @@ async def create_promotion(
 ) -> MainResponse[PromotionResponse]:
     entity = Promotion.from_dict(request.model_dump())
     created = await service.create(entity)
-    return get_ok[MainResponse[PromotionResponse]](PromotionResponse.from_entity(created))
+    return get_ok(PromotionResponse.from_entity(created))

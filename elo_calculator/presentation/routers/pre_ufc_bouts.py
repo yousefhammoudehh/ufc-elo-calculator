@@ -16,7 +16,7 @@ async def list_by_fighter(
     fighter_id: str, service: PreUfcBoutService = Depends(get_service(PreUfcBoutService))
 ) -> MainResponse[list[PreUfcBoutResponse]]:
     bouts = await service.list_by_fighter(fighter_id)
-    return get_ok[MainResponse[list[PreUfcBoutResponse]]](PreUfcBoutResponse.from_entity_list(bouts))
+    return get_ok(PreUfcBoutResponse.from_entity_list(bouts))
 
 
 @router.get('/by-promotion/{promotion_id}', response_model=MainResponse[list[PreUfcBoutResponse]])
@@ -24,7 +24,7 @@ async def list_by_promotion(
     promotion_id: UUID, service: PreUfcBoutService = Depends(get_service(PreUfcBoutService))
 ) -> MainResponse[list[PreUfcBoutResponse]]:
     bouts = await service.list_by_promotion(promotion_id)
-    return get_ok[MainResponse[list[PreUfcBoutResponse]]](PreUfcBoutResponse.from_entity_list(bouts))
+    return get_ok(PreUfcBoutResponse.from_entity_list(bouts))
 
 
 @router.get(
@@ -34,7 +34,7 @@ async def list_by_fighter_and_promotion(
     fighter_id: str, promotion_id: UUID, service: PreUfcBoutService = Depends(get_service(PreUfcBoutService))
 ) -> MainResponse[list[PreUfcBoutResponse]]:
     bouts = await service.list_by_fighter_and_promotion(fighter_id, promotion_id)
-    return get_ok[MainResponse[list[PreUfcBoutResponse]]](PreUfcBoutResponse.from_entity_list(bouts))
+    return get_ok(PreUfcBoutResponse.from_entity_list(bouts))
 
 
 @router.get('/record/{fighter_id}', response_model=MainResponse[dict[str, int]])
@@ -42,4 +42,4 @@ async def fighter_record(
     fighter_id: str, service: PreUfcBoutService = Depends(get_service(PreUfcBoutService))
 ) -> MainResponse[dict[str, int]]:
     record = await service.record(fighter_id)
-    return get_ok[MainResponse[dict[str, int]]](record)
+    return get_ok(record)

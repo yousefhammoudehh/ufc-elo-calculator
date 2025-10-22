@@ -1,5 +1,5 @@
 from collections.abc import Awaitable, Callable
-from typing import Concatenate, Self
+from typing import Concatenate, ParamSpec, Self, TypeVar
 
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
@@ -18,6 +18,14 @@ class UnitOfWork:
     def __init__(self, engine: AsyncEngine):
         self.engine: AsyncEngine = engine
         self.connection: AsyncConnection
+        # Lazily initialized repositories
+        self._fighters: FighterRepository | None = None
+        self._bouts: BoutRepository | None = None
+        self._events: EventRepository | None = None
+        self._bout_participants: BoutParticipantRepository | None = None
+        self._judge_scores: JudgeScoreRepository | None = None
+        self._pre_ufc_bouts: PreUfcBoutRepository | None = None
+        self._promotions: PromotionRepository | None = None
 
     async def __aenter__(self) -> Self:
         self.connection = await self.engine.connect()
@@ -34,45 +42,45 @@ class UnitOfWork:
     # Lazy-loaded repository properties
     @property
     def fighters(self) -> FighterRepository:
-        if not hasattr(self, '_fighters'):
+        if self._fighters is None:
             self._fighters = FighterRepository(self.connection)
-        return self._fighters  # type: ignore[attr-defined]
+        return self._fighters
 
     @property
     def bouts(self) -> BoutRepository:
-        if not hasattr(self, '_bouts'):
+        if self._bouts is None:
             self._bouts = BoutRepository(self.connection)
-        return self._bouts  # type: ignore[attr-defined]
+        return self._bouts
 
     @property
     def events(self) -> EventRepository:
-        if not hasattr(self, '_events'):
+        if self._events is None:
             self._events = EventRepository(self.connection)
-        return self._events  # type: ignore[attr-defined]
+        return self._events
 
     @property
     def bout_participants(self) -> BoutParticipantRepository:
-        if not hasattr(self, '_bout_participants'):
+        if self._bout_participants is None:
             self._bout_participants = BoutParticipantRepository(self.connection)
-        return self._bout_participants  # type: ignore[attr-defined]
+        return self._bout_participants
 
     @property
     def judge_scores(self) -> JudgeScoreRepository:
-        if not hasattr(self, '_judge_scores'):
+        if self._judge_scores is None:
             self._judge_scores = JudgeScoreRepository(self.connection)
-        return self._judge_scores  # type: ignore[attr-defined]
+        return self._judge_scores
 
     @property
     def pre_ufc_bouts(self) -> PreUfcBoutRepository:
-        if not hasattr(self, '_pre_ufc_bouts'):
+        if self._pre_ufc_bouts is None:
             self._pre_ufc_bouts = PreUfcBoutRepository(self.connection)
-        return self._pre_ufc_bouts  # type: ignore[attr-defined]
+        return self._pre_ufc_bouts
 
     @property
     def promotions(self) -> PromotionRepository:
-        if not hasattr(self, '_promotions'):
+        if self._promotions is None:
             self._promotions = PromotionRepository(self.connection)
-        return self._promotions  # type: ignore[attr-defined]
+        return self._promotions
 
     async def commit(self) -> None:
         await self.connection.commit()
@@ -81,12 +89,21 @@ class UnitOfWork:
         await self.connection.rollback()
 
 
-def with_uow[T: BaseService, **P, R](
-    func: Callable[Concatenate[T, UnitOfWork, P], Awaitable[R]],
-) -> Callable[Concatenate[T, UnitOfWork, P], Awaitable[R]]:
-    """Decorator to provide a UnitOfWork instance to service methods transparently."""
+T = TypeVar('T', bound=BaseService)
+P = ParamSpec('P')
+R = TypeVar('R')
 
-    async def wrapper(self: T, *args: P.args, **kwargs: P.kwargs) -> R:  # type: ignore[no-untyped-def]
+
+def with_uow(  # noqa: UP047
+    func: Callable[Concatenate[T, UnitOfWork, P], Awaitable[R]],
+) -> Callable[Concatenate[T, P], Awaitable[R]]:
+    """Provide a UnitOfWork instance to service methods transparently.
+
+    Methods should be declared as: async def method(self, uow: UnitOfWork, *args) -> R
+    Callers invoke: await service.method(*args)  # uow injected by decorator
+    """
+
+    async def wrapper(self: T, /, *args: P.args, **kwargs: P.kwargs) -> R:
         async with UnitOfWork(engine) as uow:
             return await func(self, uow, *args, **kwargs)
 

@@ -20,7 +20,7 @@ class BoutService(BaseService):
         return await uow.bouts.get_by_bout_id(bout_id)
 
     @with_uow
-    async def list(self, uow: UnitOfWork) -> list[Bout]:
+    async def get_all(self, uow: UnitOfWork) -> list[Bout]:
         return await uow.bouts.get_all()
 
     @with_uow

@@ -1,4 +1,5 @@
-import uuid
+from datetime import date
+from uuid import UUID
 
 from elo_calculator.application.base_service import BaseService
 from elo_calculator.domain.entities.event import Event
@@ -6,32 +7,18 @@ from elo_calculator.infrastructure.repositories.unit_of_work import UnitOfWork, 
 
 
 class EventService(BaseService):
-    def __init__(self, uow: UnitOfWork):
-        self.uow = uow
+    @with_uow
+    async def get_all(self, uow: UnitOfWork) -> list[Event]:
+        return await uow.events.get_all(sort_by='event_date', order='asc')
 
     @with_uow
-    async def create_event(self, event: Event) -> Event:
-        async with self.uow:
-            created_event = await self.uow.events.add(event)
-            await self.uow.commit()
-            return created_event
+    async def create(self, uow: UnitOfWork, event: Event) -> Event:
+        return await uow.events.add(event)
 
-    async def get_event(self, event_id: uuid.UUID) -> Event | None:
-        async with self.uow:
-            return await self.uow.events.get(event_id)
+    @with_uow
+    async def get_by_event_id(self, uow: UnitOfWork, event_id: UUID) -> Event | None:
+        return await uow.events.get_by_event_id(event_id)
 
-    async def update_event(self, event_id: uuid.UUID, **kwargs) -> Event | None:
-        async with self.uow:
-            updated_event = await self.uow.events.update(event_id, **kwargs)
-            await self.uow.commit()
-            return updated_event
-
-    async def delete_event(self, event_id: uuid.UUID) -> bool:
-        async with self.uow:
-            result = await self.uow.events.delete(event_id)
-            await self.uow.commit()
-            return result
-
-    async def list_events(self) -> list[Event]:
-        async with self.uow:
-            return await self.uow.events.list()
+    @with_uow
+    async def list_by_date(self, uow: UnitOfWork, event_date: date) -> list[Event]:
+        return await uow.events.get_by_date(event_date)
