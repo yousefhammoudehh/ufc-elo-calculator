@@ -94,7 +94,7 @@ P = ParamSpec('P')
 R = TypeVar('R')
 
 
-def with_uow(  # noqa: UP047
+def with_uow(  # noqa: UP047 - keep ParamSpec/Concatenate for mypy/py311 compatibility instead of PEP 695 type params
     func: Callable[Concatenate[T, UnitOfWork, P], Awaitable[R]],
 ) -> Callable[Concatenate[T, P], Awaitable[R]]:
     """Provide a UnitOfWork instance to service methods transparently.

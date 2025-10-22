@@ -2,6 +2,7 @@ from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
+from sqlalchemy.engine.url import make_url
 
 from elo_calculator.infrastructure.database.engine import get_db_url
 from elo_calculator.infrastructure.database.schema import metadata
@@ -40,7 +41,12 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    url = target_url
+    # Ensure a synchronous driver is used in offline mode
+    sync_url = make_url(target_url)
+    if '+' in sync_url.drivername:
+        # Strip async driver (e.g., postgresql+asyncpg -> postgresql)
+        sync_url = sync_url.set(drivername=sync_url.drivername.split('+', 1)[0])
+    url = str(sync_url)
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -60,9 +66,13 @@ def run_migrations_online() -> None:
 
     """
     # Override the sqlalchemy.url from alembic.ini with our custom URL
-    configuration = config.get_section(config.config_ini_section, {})
-    # Replace asyncpg with psycopg (sync driver) for migrations
-    configuration['sqlalchemy.url'] = target_url.replace('postgresql+asyncpg://', 'postgresql://')
+    configuration = config.get_section(config.config_ini_section, {}) or {}
+    # Parse target URL and ensure a synchronous driver for migrations
+    sync_url = make_url(target_url)
+    if '+' in sync_url.drivername:
+        # Strip async driver (e.g., postgresql+asyncpg -> postgresql)
+        sync_url = sync_url.set(drivername=sync_url.drivername.split('+', 1)[0])
+    configuration['sqlalchemy.url'] = str(sync_url)
     
     connectable = engine_from_config(
         configuration,
