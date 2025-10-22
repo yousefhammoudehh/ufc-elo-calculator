@@ -3,11 +3,26 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
 
+from elo_calculator.configs.lifespan import lifespan
+from elo_calculator.presentation.routers import bout_participants as bout_participants_router
+from elo_calculator.presentation.routers import bouts as bouts_router
+from elo_calculator.presentation.routers import events as events_router
+from elo_calculator.presentation.routers import fighters as fighters_router
+from elo_calculator.presentation.routers import judge_scores as judge_scores_router
+from elo_calculator.presentation.routers import pre_ufc_bouts as pre_ufc_bouts_router
+from elo_calculator.presentation.routers import promotions as promotions_router
 from elo_calculator.presentation.utils.exception_handlers import register_exception_handlers
 
-app = FastAPI(title='UFC ELO Calculator API')
+app = FastAPI(title='UFC ELO Calculator API', lifespan=lifespan)
 
 register_exception_handlers(app)
+app.include_router(events_router.router)
+app.include_router(fighters_router.router)
+app.include_router(bouts_router.router)
+app.include_router(bout_participants_router.router)
+app.include_router(judge_scores_router.router)
+app.include_router(pre_ufc_bouts_router.router)
+app.include_router(promotions_router.router)
 
 
 def custom_openapi() -> dict[str, Any]:
