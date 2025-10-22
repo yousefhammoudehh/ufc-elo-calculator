@@ -1,10 +1,17 @@
-from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
-from typing import Self
+from collections.abc import Awaitable, Callable
+from typing import Concatenate, Self
 
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
+from elo_calculator.application.base_service import BaseService
 from elo_calculator.infrastructure.database.engine import engine
+from elo_calculator.infrastructure.repositories.bout_participant_repository import BoutParticipantRepository
+from elo_calculator.infrastructure.repositories.bout_repository import BoutRepository
+from elo_calculator.infrastructure.repositories.event_repository import EventRepository
+from elo_calculator.infrastructure.repositories.fighter_repository import FighterRepository
+from elo_calculator.infrastructure.repositories.judge_score_repository import JudgeScoreRepository
+from elo_calculator.infrastructure.repositories.pre_ufc_bout_repository import PreUfcBoutRepository
+from elo_calculator.infrastructure.repositories.promotion_repository import PromotionRepository
 
 
 class UnitOfWork:
@@ -24,7 +31,48 @@ class UnitOfWork:
             await self.commit()
         await self.connection.close()
 
-    # Add repository properties here, e.g. fighter_repo, bout_repo, etc. when implemented.
+    # Lazy-loaded repository properties
+    @property
+    def fighters(self) -> FighterRepository:
+        if not hasattr(self, '_fighters'):
+            self._fighters = FighterRepository(self.connection)
+        return self._fighters  # type: ignore[attr-defined]
+
+    @property
+    def bouts(self) -> BoutRepository:
+        if not hasattr(self, '_bouts'):
+            self._bouts = BoutRepository(self.connection)
+        return self._bouts  # type: ignore[attr-defined]
+
+    @property
+    def events(self) -> EventRepository:
+        if not hasattr(self, '_events'):
+            self._events = EventRepository(self.connection)
+        return self._events  # type: ignore[attr-defined]
+
+    @property
+    def bout_participants(self) -> BoutParticipantRepository:
+        if not hasattr(self, '_bout_participants'):
+            self._bout_participants = BoutParticipantRepository(self.connection)
+        return self._bout_participants  # type: ignore[attr-defined]
+
+    @property
+    def judge_scores(self) -> JudgeScoreRepository:
+        if not hasattr(self, '_judge_scores'):
+            self._judge_scores = JudgeScoreRepository(self.connection)
+        return self._judge_scores  # type: ignore[attr-defined]
+
+    @property
+    def pre_ufc_bouts(self) -> PreUfcBoutRepository:
+        if not hasattr(self, '_pre_ufc_bouts'):
+            self._pre_ufc_bouts = PreUfcBoutRepository(self.connection)
+        return self._pre_ufc_bouts  # type: ignore[attr-defined]
+
+    @property
+    def promotions(self) -> PromotionRepository:
+        if not hasattr(self, '_promotions'):
+            self._promotions = PromotionRepository(self.connection)
+        return self._promotions  # type: ignore[attr-defined]
 
     async def commit(self) -> None:
         await self.connection.commit()
@@ -33,7 +81,13 @@ class UnitOfWork:
         await self.connection.rollback()
 
 
-@asynccontextmanager
-async def get_uow() -> AsyncGenerator[UnitOfWork]:
-    async with UnitOfWork(engine) as uow:
-        yield uow
+def with_uow[T: BaseService, **P, R](
+    func: Callable[Concatenate[T, UnitOfWork, P], Awaitable[R]],
+) -> Callable[Concatenate[T, UnitOfWork, P], Awaitable[R]]:
+    """Decorator to provide a UnitOfWork instance to service methods transparently."""
+
+    async def wrapper(self: T, *args: P.args, **kwargs: P.kwargs) -> R:  # type: ignore[no-untyped-def]
+        async with UnitOfWork(engine) as uow:
+            return await func(self, uow, *args, **kwargs)
+
+    return wrapper
