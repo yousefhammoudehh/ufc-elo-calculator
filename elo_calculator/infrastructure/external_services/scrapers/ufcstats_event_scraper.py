@@ -194,21 +194,54 @@ class UFCStatsEventScraper:
                         results_by_id[fighter_id] = 'D'
                     elif 'NO CONTEST' in res or res.startswith('NC'):
                         results_by_id[fighter_id] = 'NC'
+                    elif res in {'W', 'L', 'D'}:
+                        # Some early events render a single-letter status without the full word
+                        results_by_id[fighter_id] = res
                 elif fighter_id and not status:
                     # Fallback: heuristic scan within person block
                     try:
-                        txt = person.get_text(' ', strip=True).upper()
-                        if ' WIN ' in f' {txt} ':
+                        txt = person.get_text('\n', strip=True).upper()
+                        padded = f' {re.sub(r"\s+", " ", txt)} '
+                        # Prefer explicit words when present
+                        if ' WIN ' in padded:
                             results_by_id[fighter_id] = 'W'
-                        elif ' LOSS ' in f' {txt} ':
+                        elif ' LOSS ' in padded:
                             results_by_id[fighter_id] = 'L'
-                        elif ' DRAW ' in f' {txt} ':
+                        elif ' DRAW ' in padded:
                             results_by_id[fighter_id] = 'D'
-                        elif ' NO CONTEST ' in f' {txt} ' or ' NC ' in f' {txt} ':
+                        elif ' NO CONTEST ' in padded or ' NC ' in padded:
                             results_by_id[fighter_id] = 'NC'
+                        else:
+                            # Handle single-letter tokens rendered standalone (e.g., early events)
+                            # Match isolated W/L/D surrounded by non-letters
+                            if re.search(r'(?:^|[^A-Z])(W)(?:[^A-Z]|$)', padded):
+                                results_by_id[fighter_id] = 'W'
+                            elif re.search(r'(?:^|[^A-Z])(L)(?:[^A-Z]|$)', padded):
+                                results_by_id[fighter_id] = 'L'
+                            elif re.search(r'(?:^|[^A-Z])(D)(?:[^A-Z]|$)', padded):
+                                results_by_id[fighter_id] = 'D'
                     except Exception:
                         pass
         return results_by_id
+
+    def _parse_persons(self, soup: BeautifulSoup) -> list[tuple[str | None, str | None]]:
+        """Return ordered list of (fighter_id, fighter_name) from the person rows.
+
+        This preserves left/right order on the page and is useful when general stats
+        tables are missing (older events) so we can still resolve fighter IDs.
+        """
+        out: list[tuple[str | None, str | None]] = []
+        persons_container = soup.find('div', class_='b-fight-details__persons')
+        if not persons_container:
+            return out
+        persons = persons_container.find_all('div', class_='b-fight-details__person')
+        for person in persons:
+            link = person.find('a', href=True)
+            href_val = link.get('href') if link else None
+            fid = href_val.rstrip('/').split('/')[-1] if isinstance(href_val, str) else None
+            name = link.get_text(strip=True) if link else None
+            out.append((fid, name))
+        return out
 
     def _parse_general_stats(self, soup: BeautifulSoup) -> tuple[ScrapedFightFighter, ScrapedFightFighter]:
         sections = soup.find_all('section', class_='b-fight-details__section')
@@ -324,6 +357,21 @@ class UFCStatsEventScraper:
         results_by_id = self._parse_person_results(soup)
         # General stats and names/ids
         f1, f2 = self._parse_general_stats(soup)
+        # Handle pages where round-by-round stats are not available (older events)
+        page_text = soup.get_text(' ', strip=True).upper()
+        rbunavail = 'ROUND-BY-ROUND STATS NOT CURRENTLY AVAILABLE' in page_text
+        # If fighter ids were not found via general stats table or stats are unavailable, use person rows
+        if (not getattr(f1, 'fighter_id', None) or not getattr(f2, 'fighter_id', None)) or rbunavail:
+            people = self._parse_persons(soup)
+            if len(people) >= 2:
+                if not getattr(f1, 'fighter_id', None):
+                    f1.fighter_id = people[0][0]
+                    if not getattr(f1, 'name', None):
+                        f1.name = people[0][1]
+                if not getattr(f2, 'fighter_id', None):
+                    f2.fighter_id = people[1][0]
+                    if not getattr(f2, 'name', None):
+                        f2.name = people[1][1]
         # Results mapping
         if f1.fighter_id in results_by_id:
             f1.result = results_by_id[f1.fighter_id]
@@ -331,6 +379,43 @@ class UFCStatsEventScraper:
             f2.result = results_by_id[f2.fighter_id]
         # Significant strikes breakdown
         self._parse_sig_strikes(soup, f1, f2)
+        # If round-by-round stats are unavailable, assume missing stats are zeros
+        if rbunavail:
+            for f in (f1, f2):
+                try:
+                    # Core totals and percents
+                    if getattr(f, 'kd', None) is None:
+                        f.kd = 0
+                    if getattr(f, 'sig_strikes', None) is None:
+                        f.sig_strikes = 0
+                    if getattr(f, 'sig_strike_percent', None) is None:
+                        f.sig_strike_percent = 0.0
+                    if getattr(f, 'sig_strikes_thrown', None) is None:
+                        f.sig_strikes_thrown = 0
+                    if getattr(f, 'total_strikes', None) is None:
+                        f.total_strikes = 0
+                    if getattr(f, 'total_strikes_thrown', None) is None:
+                        f.total_strikes_thrown = 0
+                    if getattr(f, 'td', None) is None:
+                        f.td = 0
+                    if getattr(f, 'td_attempts', None) is None:
+                        f.td_attempts = 0
+                    if getattr(f, 'td_percent', None) is None:
+                        f.td_percent = 0.0
+                    if getattr(f, 'sub_attempts', None) is None:
+                        f.sub_attempts = 0
+                    if getattr(f, 'rev', None) is None:
+                        f.rev = 0
+                    if getattr(f, 'ctrl', None) is None:
+                        f.ctrl = 0
+                    # Significant strike breakdowns
+                    for key in ['head_ss', 'body_ss', 'leg_ss', 'distance_ss', 'clinch_ss', 'ground_ss']:
+                        if getattr(f, key, None) is None:
+                            setattr(f, key, 0)
+                    # Derived accuracy
+                    f.strike_accuracy = 0.0
+                except Exception:
+                    pass
         # Convert time string
         time_seconds = _time_to_seconds(meta.time_str)
         return ScrapedFight(

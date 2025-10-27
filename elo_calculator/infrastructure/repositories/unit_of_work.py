@@ -17,6 +17,7 @@ class UnitOfWork:
     def __init__(self, engine: AsyncEngine):
         self.engine: AsyncEngine = engine
         self.connection: AsyncConnection
+        self.rollback_only: bool = False
         # Lazily initialized repositories
         self._fighters: FighterRepository | None = None
         self._bouts: BoutRepository | None = None
@@ -31,7 +32,7 @@ class UnitOfWork:
         return self
 
     async def __aexit__(self, exc_type: type | None, exc_val: Exception | None, exc_tb: object | None) -> None:
-        if exc_type:
+        if exc_type or self.rollback_only:
             await self.rollback()
         else:
             await self.commit()
