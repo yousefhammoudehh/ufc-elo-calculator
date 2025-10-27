@@ -9,6 +9,8 @@ class Fighter(BaseEntityBase):
 
     fighter_id: str
     name: str
-    entry_elo: int | None = None
-    current_elo: int | None = None
-    peak_elo: int | None = None
+    entry_elo: float | None = None
+    current_elo: float | None = None
+    peak_elo: float | None = None
+    tapology_link: str | None = None
+    stats_link: str | None = None

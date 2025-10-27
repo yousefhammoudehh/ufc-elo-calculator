@@ -18,3 +18,6 @@ class EventResponse(DataModel):
     event_id: UUID
     event_date: date
     event_link: str | None = None
+    fighters_seeded: bool | None = False
+    fights_seeded: bool | None = False
+    event_stats_link: str | None = None

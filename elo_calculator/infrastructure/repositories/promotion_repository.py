@@ -1,3 +1,4 @@
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from elo_calculator.domain.entities import Promotion
@@ -19,3 +20,10 @@ class PromotionRepository(BaseRepository[Promotion]):
     async def get_by_strength_range(self, min_strength: float, max_strength: float) -> list[Promotion]:
         """Get promotions within a strength range."""
         return await self.get_all(filters={'strength:>=': min_strength, 'strength:<=': max_strength})
+
+    async def get_by_link(self, link: str) -> Promotion | None:
+        """Get a single promotion by its link."""
+        cmd = select(self.table).where(self.table.c.link == link)
+        result = await self.connection.execute(cmd)
+        row = result.first()
+        return self._map_row_to_model(row._asdict()) if row else None

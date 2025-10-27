@@ -9,7 +9,6 @@ from elo_calculator.infrastructure.repositories.bout_participant_repository impo
 from elo_calculator.infrastructure.repositories.bout_repository import BoutRepository
 from elo_calculator.infrastructure.repositories.event_repository import EventRepository
 from elo_calculator.infrastructure.repositories.fighter_repository import FighterRepository
-from elo_calculator.infrastructure.repositories.judge_score_repository import JudgeScoreRepository
 from elo_calculator.infrastructure.repositories.pre_ufc_bout_repository import PreUfcBoutRepository
 from elo_calculator.infrastructure.repositories.promotion_repository import PromotionRepository
 
@@ -23,7 +22,6 @@ class UnitOfWork:
         self._bouts: BoutRepository | None = None
         self._events: EventRepository | None = None
         self._bout_participants: BoutParticipantRepository | None = None
-        self._judge_scores: JudgeScoreRepository | None = None
         self._pre_ufc_bouts: PreUfcBoutRepository | None = None
         self._promotions: PromotionRepository | None = None
 
@@ -63,12 +61,6 @@ class UnitOfWork:
         if self._bout_participants is None:
             self._bout_participants = BoutParticipantRepository(self.connection)
         return self._bout_participants
-
-    @property
-    def judge_scores(self) -> JudgeScoreRepository:
-        if self._judge_scores is None:
-            self._judge_scores = JudgeScoreRepository(self.connection)
-        return self._judge_scores
 
     @property
     def pre_ufc_bouts(self) -> PreUfcBoutRepository:

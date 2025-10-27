@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, CheckConstraint, Column, Date, ForeignKey, Integer, Numeric, String, Table, Text
+from sqlalchemy import Boolean, CheckConstraint, Column, Date, Float, ForeignKey, Integer, Numeric, String, Table, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import text
 
@@ -21,9 +21,11 @@ fighters = Table(
     metadata,
     Column('fighter_id', String(16), primary_key=True),
     Column('name', String, nullable=False),
-    Column('entry_elo', Integer),
-    Column('current_elo', Integer),
-    Column('peak_elo', Integer),
+    Column('entry_elo', Float),
+    Column('current_elo', Float),
+    Column('peak_elo', Float),
+    Column('tapology_link', Text),
+    Column('stats_link', Text),
 )
 
 # 3. Events
@@ -33,6 +35,9 @@ events = Table(
     Column('event_id', UUID(as_uuid=False), primary_key=True, server_default=text('gen_random_uuid()')),
     Column('event_date', Date, nullable=False),
     Column('event_link', String),
+    Column('fighters_seeded', Boolean, server_default=text('false')),
+    Column('fights_seeded', Boolean, server_default=text('false')),
+    Column('event_stats_link', Text),
 )
 
 # 4. Bouts
@@ -72,24 +77,13 @@ bout_participants = Table(
     Column('clinch_ss', Integer),
     Column('ground_ss', Integer),
     Column('strike_accuracy', Numeric(5, 2)),
-    Column('elo_before', Integer),
-    Column('elo_after', Integer),
+    Column('elo_before', Float),
+    Column('elo_after', Float),
     Column('ufc_fights_before', Integer),
     Column('days_since_last_fight', Integer),
 )
 
-# 6. Judge Scores
-judge_scores = Table(
-    'judge_scores',
-    metadata,
-    Column('bout_id', String(16), ForeignKey('bouts.bout_id'), primary_key=True),
-    Column('fighter_id', String(16), ForeignKey('fighters.fighter_id'), primary_key=True),
-    Column('judge1_score', Integer),
-    Column('judge2_score', Integer),
-    Column('judge3_score', Integer),
-)
-
-# 7. Pre-UFC Bouts
+# 6. Pre-UFC Bouts
 pre_ufc_bouts = Table(
     'pre_ufc_bouts',
     metadata,

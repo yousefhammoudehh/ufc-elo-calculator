@@ -196,8 +196,8 @@ class RetryTransport(AsyncBaseTransport, BaseTransport):
         attempts_made = 0
         response = None
         while True:
-            # Retrying starts here
-            if response:
+            # Retrying starts here (response-based)
+            if response is not None:
                 logger.info(
                     f'Retrying the call to url: {request.url} with method: {request.method}. '
                     f'Failed response status code: {response.status_code}'
@@ -208,7 +208,21 @@ class RetryTransport(AsyncBaseTransport, BaseTransport):
                     else:
                         self._callback()
                 time.sleep(self._calculate_sleep(attempts_made, response.headers))
-            response = send_method(request)
+            try:
+                response = send_method(request)
+            except Exception as exc:  # network exceptions (timeouts, connection resets, etc.)
+                if remaining_attempts < 1:
+                    raise
+                attempts_made += 1
+                remaining_attempts -= 1
+                logger.warning(
+                    f'HTTP request raised {exc.__class__.__name__} for url: {request.url}; '
+                    f'retrying attempt={attempts_made + 1} remaining={remaining_attempts}'
+                )
+                # No Retry-After header for exceptions -> supply empty headers
+                time.sleep(self._calculate_sleep(attempts_made, Headers()))
+                continue
+
             if remaining_attempts < 1 or response.status_code not in self._retry_status_codes:
                 return response
             response.close()

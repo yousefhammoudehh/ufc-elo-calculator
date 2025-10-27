@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from elo_calculator.application.services.fighter_service import FighterService
 from elo_calculator.domain.entities import Fighter
@@ -35,3 +35,25 @@ async def create_fighter(
     entity = Fighter.from_dict(request.model_dump())
     created = await service.create(entity)
     return get_ok(FighterResponse.from_entity(created))
+
+
+@router.get('/by-stats-link', response_model=MainResponse[FighterResponse])
+async def get_fighter_by_stats_link(
+    stats_link: str = Query(..., description='Canonical stats link URL'),
+    service: FighterService = Depends(get_service(FighterService)),
+) -> MainResponse[FighterResponse]:
+    fighter = await service.get_by_stats_link(stats_link)
+    if fighter is None:
+        return get_not_found(message=f'Fighter with stats link not found: {stats_link}')
+    return get_ok(FighterResponse.from_entity(fighter))
+
+
+@router.get('/by-tapology-link', response_model=MainResponse[FighterResponse])
+async def get_fighter_by_tapology_link(
+    tapology_link: str = Query(..., description='Canonical Tapology link URL'),
+    service: FighterService = Depends(get_service(FighterService)),
+) -> MainResponse[FighterResponse]:
+    fighter = await service.get_by_tapology_link(tapology_link)
+    if fighter is None:
+        return get_not_found(message=f'Fighter with tapology link not found: {tapology_link}')
+    return get_ok(FighterResponse.from_entity(fighter))

@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from elo_calculator.application.services.event_service import EventService
 from elo_calculator.domain.entities import Event
@@ -13,8 +13,12 @@ router = APIRouter(prefix='/events', tags=['events'])
 
 
 @router.get('/', response_model=MainResponse[list[EventResponse]])
-async def list_events(service: EventService = Depends(get_service(EventService))) -> MainResponse[list[EventResponse]]:
-    events = await service.get_all()
+async def list_events(
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=100, ge=1, le=1000),
+    service: EventService = Depends(get_service(EventService)),
+) -> MainResponse[list[EventResponse]]:
+    events = await service.get_all(page=page, limit=limit)
     return get_ok(EventResponse.from_entity_list(events))
 
 
@@ -25,6 +29,17 @@ async def create_event(
     entity = Event.from_dict(request.model_dump())
     created = await service.create(entity)
     return get_ok(EventResponse.from_entity(created))
+
+
+@router.get('/by-link', response_model=MainResponse[EventResponse])
+async def get_event_by_link(
+    event_link: str = Query(..., description='Canonical event link URL'),
+    service: EventService = Depends(get_service(EventService)),
+) -> MainResponse[EventResponse]:
+    event = await service.get_by_link(event_link)
+    if event is None:
+        return get_not_found(message=f'Event link not found: {event_link}')
+    return get_ok(EventResponse.from_entity(event))
 
 
 @router.get('/{event_id}', response_model=MainResponse[EventResponse])

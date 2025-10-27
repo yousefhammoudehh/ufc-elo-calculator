@@ -24,21 +24,34 @@ class FighterRepository(BaseRepository[Fighter]):
         fighters_list = await self.get_all(filters={'name': name})
         return fighters_list[0] if fighters_list else None
 
+    async def get_by_stats_link(self, stats_link: str) -> Fighter | None:
+        """Get a fighter by their stats_link."""
+        cmd = select(self.table).where(self.table.c.stats_link == stats_link)
+        result = await self.connection.execute(cmd)
+        row = result.first()
+        return self._map_row_to_model(row._asdict()) if row else None
+
+    async def get_by_tapology_link(self, tapology_link: str) -> Fighter | None:
+        """Get a fighter by their tapology_link."""
+        cmd = select(self.table).where(self.table.c.tapology_link == tapology_link)
+        result = await self.connection.execute(cmd)
+        row = result.first()
+        return self._map_row_to_model(row._asdict()) if row else None
+
     async def get_top_fighters_by_elo(self, limit: int = 10) -> list[Fighter]:
         """Get the top fighters by current ELO rating."""
         all_fighters = await self.get_all(sort_by='current_elo', order='desc')
         return all_fighters[:limit]
 
-    async def get_fighters_by_elo_range(self, min_elo: int, max_elo: int) -> list[Fighter]:
+    async def get_fighters_by_elo_range(self, min_elo: float, max_elo: float) -> list[Fighter]:
         """Get fighters within an ELO range."""
         return await self.get_all(filters={'current_elo:>=': min_elo, 'current_elo:<=': max_elo})
 
-    async def update_fighter_elo(self, fighter_id: str, new_elo: int) -> Fighter:
+    async def update_fighter_elo(self, fighter_id: str, new_elo: float) -> Fighter:
         """Update a fighter's current ELO and peak ELO if applicable."""
         fighter = await self.get_by_fighter_id(fighter_id)
         if not fighter:
             raise ValueError(f'Fighter with ID {fighter_id} not found')
-
         update_data = {'current_elo': new_elo}
 
         # Update peak ELO if new ELO is higher

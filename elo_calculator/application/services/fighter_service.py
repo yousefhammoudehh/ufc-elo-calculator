@@ -40,3 +40,11 @@ class FighterService(BaseService):
         if not existing:
             raise DataNotFoundException(f'Fighter id:{fighter_id} not found')
         return await uow.fighters.delete(fighter_id)
+
+    @with_uow
+    async def get_by_stats_link(self, uow: UnitOfWork, stats_link: str) -> Fighter | None:
+        return await uow.fighters.get_by_stats_link(stats_link)
+
+    @with_uow
+    async def get_by_tapology_link(self, uow: UnitOfWork, tapology_link: str) -> Fighter | None:
+        return await uow.fighters.get_by_tapology_link(tapology_link)

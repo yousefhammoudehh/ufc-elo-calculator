@@ -59,15 +59,34 @@ def _load_events_csv() -> list[dict[str, Any]]:
     norm: list[dict[str, Any]] = []
     for r in rows:
         try:
+            # CSV headers (new format): id,event_date,event_link,events_stats_link,fighters_seeded,fights_seeded
+            # Map to DB columns: event_id,event_date,event_link,event_stats_link,fighters_seeded,fights_seeded
+            csv_id = r.get('id') or r.get('event_id')
+            event_stats_link = r.get('events_stats_link') or r.get('event_stats_link')
+
+            def _to_bool(val: str | None) -> bool | None:
+                if val is None or val == '':
+                    return None
+                v = val.strip().lower()
+                if v in {'true', '1', 'yes', 'y'}:
+                    return True
+                if v in {'false', '0', 'no', 'n'}:
+                    return False
+                # Unknown token: return None so DB default can apply
+                return None
+
             norm.append(
                 {
-                    'event_id': r['event_id'],  # keep given UUIDs
-                    'event_link': r['event_link'],
+                    'event_id': csv_id,  # keep given UUIDs as strings
+                    'event_link': r.get('event_link'),
                     'event_date': date.fromisoformat(r['event_date']),
+                    'event_stats_link': event_stats_link,
+                    'fighters_seeded': _to_bool(r.get('fighters_seeded')),
+                    'fights_seeded': _to_bool(r.get('fights_seeded')),
                 }
             )
         except Exception as e:
-            logger.warning(f'Failed to parse events.csv row: {r}. Error: {e}')
+            logger.warning('Failed to parse events.csv row: %s. Error: %s', r, e, exc_info=True)
             continue
     return norm
 
@@ -84,7 +103,7 @@ def _load_promotions_csv() -> list[dict[str, Any]]:
                 {'name': r['promotions'], 'link': r['links'], 'strength': float(strength_val) if strength_val else None}
             )
         except Exception as e:
-            logger.warning(f'Failed to parse promotions.csv row: {r}. Error: {e}')
+            logger.warning('Failed to parse promotions.csv row: %s. Error: %s', r, e, exc_info=True)
             continue
     return norm
 

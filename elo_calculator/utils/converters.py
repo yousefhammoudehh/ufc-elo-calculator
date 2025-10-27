@@ -11,6 +11,13 @@ def convert_to_int(value: Any, default_value: int = 0) -> int:
         return default_value
 
 
+def convert_to_float(value: Any, default_value: float = 0.0) -> float:
+    try:
+        return float(value)
+    except ValueError:
+        return default_value
+
+
 def hash_str(data: str) -> str | None:
     if not data:
         return None

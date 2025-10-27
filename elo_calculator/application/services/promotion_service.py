@@ -9,8 +9,9 @@ from elo_calculator.infrastructure.repositories.unit_of_work import UnitOfWork, 
 
 class PromotionService(BaseService):
     @with_uow
-    async def get_all(self, uow: UnitOfWork) -> list[Promotion]:
-        return await uow.promotions.get_all()
+    async def get_all(self, uow: UnitOfWork, page: int = 1, limit: int = 100) -> list[Promotion]:
+        rows, _ = await uow.promotions.get_paginated(page=page, limit=limit)
+        return rows
 
     @with_uow
     async def get(self, uow: UnitOfWork, promotion_id: UUID) -> Promotion:
@@ -36,3 +37,7 @@ class PromotionService(BaseService):
         if not existing:
             raise DataNotFoundException(f'Promotion id:{promotion_id} not found')
         return await uow.promotions.delete(promotion_id)
+
+    @with_uow
+    async def get_by_link(self, uow: UnitOfWork, link: str) -> Promotion | None:
+        return await uow.promotions.get_by_link(link)

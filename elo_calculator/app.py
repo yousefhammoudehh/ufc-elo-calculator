@@ -8,7 +8,7 @@ from elo_calculator.presentation.routers import bout_participants as bout_partic
 from elo_calculator.presentation.routers import bouts as bouts_router
 from elo_calculator.presentation.routers import events as events_router
 from elo_calculator.presentation.routers import fighters as fighters_router
-from elo_calculator.presentation.routers import judge_scores as judge_scores_router
+from elo_calculator.presentation.routers import ingestion as ingestion_router
 from elo_calculator.presentation.routers import pre_ufc_bouts as pre_ufc_bouts_router
 from elo_calculator.presentation.routers import promotions as promotions_router
 from elo_calculator.presentation.utils.exception_handlers import register_exception_handlers
@@ -20,9 +20,9 @@ app.include_router(events_router.router)
 app.include_router(fighters_router.router)
 app.include_router(bouts_router.router)
 app.include_router(bout_participants_router.router)
-app.include_router(judge_scores_router.router)
 app.include_router(pre_ufc_bouts_router.router)
 app.include_router(promotions_router.router)
+app.include_router(ingestion_router.router)
 
 
 def custom_openapi() -> dict[str, Any]:
