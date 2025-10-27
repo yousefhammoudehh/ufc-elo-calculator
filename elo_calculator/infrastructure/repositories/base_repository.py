@@ -61,6 +61,8 @@ class BaseRepository[T: BaseEntityBase]:
             cache_prefix.value if isinstance(cache_prefix, CachePrefix) else (cache_prefix or table.name)
         )
         self.cache = CacheManager(cache_ttl or REDIS_TTL)
+        # Resolve primary key column(s)
+        self._pk_cols = list(self.table.primary_key.columns)
 
     async def add(self, entity: T, include_id: bool = False) -> T:
         excluded_fields = list(entity.config.db_excluded_fields)
@@ -83,7 +85,12 @@ class BaseRepository[T: BaseEntityBase]:
         if cached_data := await self.cache.get_json(cache_key):
             return self._map_row_to_model(cast(dict[str, Any], cached_data))
 
-        cmd = self._get_select_statement().where(self.table.c.id == entity_id)
+        if len(self._pk_cols) != 1:
+            raise DatabaseException(
+                'get_by_id requires a single-column primary key', self.model_cls.__name__, self.table.name
+            )
+        pk_col = self._pk_cols[0]
+        cmd = self._get_select_statement().where(pk_col == entity_id)
         result = await self.connection.execute(cmd)
         row = result.first()
         if not row:
@@ -134,7 +141,13 @@ class BaseRepository[T: BaseEntityBase]:
         cmd = self._get_select_with_filters(filters, sort_by, order)
 
         # Query to get the total count
-        count_cmd = cmd.with_only_columns(func.count(self.table.c.id).label('total')).order_by(None)
+        # Use the first primary key column for counting rows
+        if len(self._pk_cols) != 1:
+            raise DatabaseException(
+                'Pagination requires a single-column primary key', self.model_cls.__name__, self.table.name
+            )
+        pk_col = self._pk_cols[0]
+        count_cmd = cmd.with_only_columns(func.count(pk_col).label('total')).order_by(None)
 
         total_result = await self.connection.execute(count_cmd)
         total = total_result.scalar_one()
@@ -155,9 +168,12 @@ class BaseRepository[T: BaseEntityBase]:
             )
 
         update_data = {k: v for k, v in data.items() if k not in self.model_cls.config.db_excluded_fields}
-        cmd = (
-            update(self.table).where(self.table.c.id == entity_id).values(**update_data).returning(*self.table.columns)
-        )
+        if len(self._pk_cols) != 1:
+            raise DatabaseException(
+                'Update requires a single-column primary key', self.model_cls.__name__, self.table.name
+            )
+        pk_col = self._pk_cols[0]
+        cmd = update(self.table).where(pk_col == entity_id).values(**update_data).returning(*self.table.columns)
         result = await self.connection.execute(cmd)
         row = result.first()
         if not row:
@@ -167,7 +183,12 @@ class BaseRepository[T: BaseEntityBase]:
         return self._map_row_to_model(row._asdict())
 
     async def delete(self, entity_id: UUID) -> T:
-        cmd = delete(self.table).where(self.table.c.id == entity_id).returning(*self.table.columns)
+        if len(self._pk_cols) != 1:
+            raise DatabaseException(
+                'Delete requires a single-column primary key', self.model_cls.__name__, self.table.name
+            )
+        pk_col = self._pk_cols[0]
+        cmd = delete(self.table).where(pk_col == entity_id).returning(*self.table.columns)
         result = await self.connection.execute(cmd)
         row = result.first()
         if not row:

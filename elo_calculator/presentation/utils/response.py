@@ -2,6 +2,7 @@
 import json
 from collections.abc import Sequence
 from datetime import date, datetime, time, timedelta
+from decimal import Decimal
 from typing import Any, cast
 from uuid import UUID
 
@@ -13,7 +14,7 @@ from elo_calculator.utils.date_parser import date_to_iso_str, datetime_to_iso_st
 
 
 class CustomJSONEncoder(json.JSONEncoder):
-    def default(self, obj: Any) -> Any:
+    def default(self, obj: Any) -> Any:  # noqa: PLR0911
         if isinstance(obj, UUID):
             return str(obj)
         if isinstance(obj, datetime):
@@ -24,6 +25,9 @@ class CustomJSONEncoder(json.JSONEncoder):
             return time_to_str(obj)
         if isinstance(obj, timedelta):
             return timedelta_to_iso_str(obj)
+        if isinstance(obj, Decimal):
+            # Preserve numeric JSON type for decimals (e.g., promotion.strength)
+            return float(obj)
 
         return super().default(obj)
 
