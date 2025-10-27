@@ -81,6 +81,16 @@ async def ingest_event_fights_and_elo(
     return get_ok(payload)
 
 
+@router.post('/fights-first', response_model=MainResponse[FightScrapeListResponse])
+async def ingest_first_unseeded_event_fights(
+    request: FirstUnseededEventsRequest, service: FightScrapeService = Depends(get_service(FightScrapeService))
+) -> MainResponse[FightScrapeListResponse]:
+    # Strict chronological seeding: stop on first failure inside an event or across events
+    results = await service.seed_first_unseeded_events_fights(request.limit, strict=True)
+    payload = FightScrapeListResponse.from_service_list(results)
+    return get_ok(payload)
+
+
 @router.post('/events-first', response_model=MainResponse[FirstUnseededEventsResponse])
 async def ingest_first_unseeded_events(
     request: FirstUnseededEventsRequest, service: EventIngestionService = Depends(get_service(EventIngestionService))
