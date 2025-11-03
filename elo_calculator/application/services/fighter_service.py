@@ -48,3 +48,13 @@ class FighterService(BaseService):
     @with_uow
     async def get_by_tapology_link(self, uow: UnitOfWork, tapology_link: str) -> Fighter | None:
         return await uow.fighters.get_by_tapology_link(tapology_link)
+
+    @with_uow
+    async def search_by_name(self, uow: UnitOfWork, q: str, limit: int = 20) -> list[Fighter]:
+        return await uow.fighters.search_by_name(q, limit)
+
+    @with_uow
+    async def search_by_name_paginated(
+        self, uow: UnitOfWork, q: str, page: int, limit: int, sort_by: str, order: str
+    ) -> tuple[list[Fighter], int]:
+        return await uow.fighters.search_by_name_paginated(q, page, limit, sort_by, order)

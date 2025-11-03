@@ -28,6 +28,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from math import exp
 from typing import Any, Optional, Protocol, runtime_checkable, cast
+import re
 
 from elo_calculator.domain.shared.enumerations import FightOutcome
 from elo_calculator.application.services.performance_score import compute_ps_from_row
@@ -75,7 +76,7 @@ class EntryEloParams:
     nu: float = 8.0
     use_prior: bool = True
     k0: float = 1.0  # pseudo-fight count for prior at 0.5
-    default_strength: float = 0.4
+    default_strength: float = 0.7
 
 
 def gamma_growth(n: float, nu: float) -> float:
@@ -159,8 +160,8 @@ CENTER = 1500.0
 K0 = 28.0
 
 # Outcome base and floors for winner
-OUTCOME_B = {'KO': 0.95, 'SUB': 0.92, 'TKO': 0.90, 'UD': 0.75, 'SD': 0.60, 'MD': 0.60}
-OUTCOME_FLOOR = {'KO': 0.050, 'SUB': 0.040, 'TKO': 0.040, 'UD': 0.020, 'SD': 0.010, 'MD': 0.010}
+OUTCOME_B = {'KO_TKO': 0.925, 'SUB': 0.92, 'UD': 0.75, 'SD': 0.60, 'MD': 0.60, 'DQ': 0.60, 'TKO_DS': 0.88}
+OUTCOME_FLOOR = {'KO_TKO': 0.045, 'SUB': 0.040, 'UD': 0.020, 'SD': 0.010, 'MD': 0.010, 'DQ': 0.010, 'TKO_DS': 0.035}
 ALPHA = 0.5  # PS nudge slope
 
 
@@ -172,11 +173,17 @@ def logistic_expect(Ra: float, Rb: float, s: float = SCALE_S) -> float:
 
 def method_class(method: str) -> str:
     m = (method or '').lower()
-    if 'ko' in m and 'tko' not in m:
-        return 'KO'
-    if 'tko' in m or 'technical knockout' in m:
-        return 'TKO'
-    if 'sub' in m:
+    if 'overturned' in m or 'could not continue' in m:
+        return 'NC'
+    if 'draw' in m or 'other' in m:
+        return 'DRAW'
+    if 'dq' in m or 'disqual' in m:
+        return 'DQ'
+    if 'tko' in m or 'technical knockout' in m or 'ko' in m:
+        if 'doctor' in m:
+            return 'TKO_DS'
+        return 'KO_TKO'
+    if 'sub' in m or 'technical submission' in m:
         return 'SUB'
     if 'decision' in m:
         if 'unanimous' in m:
@@ -185,11 +192,7 @@ def method_class(method: str) -> str:
             return 'SD'
         if 'majority' in m:
             return 'MD'
-        return 'UD'  # default decision type
-    if 'draw' in m:
-        return 'DRAW'
-    if 'nc' in m or 'no contest' in m:
-        return 'NC'
+        return 'UD'
     return 'UD'
 
 
@@ -214,25 +217,38 @@ def compute_targets(PSw: float, Ew: float, method: str) -> tuple[float, float]:
 
 @dataclass
 class KContext:
-    rounds_scheduled: int  # 3 or 5
+    rounds_scheduled: int  # total number of scheduled segments (incl. OT if present)
     method: str
     ufc_fights_before: int
     days_since_last_fight: int
     round_num: Optional[int] = None
     time_sec: Optional[int] = None
+    # New: detailed schedule information
+    total_scheduled_seconds: Optional[int] = None
+    per_round_seconds: Optional[list[int]] = None
+    # Title context (optional; used for transparency if needed)
+    is_title_fight: Optional[bool] = None
 
 
 def k_factor(ctx: KContext) -> float:
     mclass = method_class(ctx.method)
     K = K0
-    # Rounds multiplier
-    K *= 1.05 if ctx.rounds_scheduled == 5 else 1.00
-    # Result class multiplier
-    if mclass == 'KO':
-        K *= 1.15
-    elif mclass in {'SUB', 'TKO'}:
+    # Rounds multiplier: scale with total scheduled time versus 3x5 baseline, capped at +5%
+    if ctx.total_scheduled_seconds is not None and ctx.total_scheduled_seconds > 0:
+        base = 900  # 3 x 5 min baseline
+        cap = 1500  # 5 x 5 min cap
+        delta = max(0, min(ctx.total_scheduled_seconds, cap) - base)
+        span = max(1, cap - base)
+        K *= 1.0 + 0.05 * (delta / span)
+    else:
+        # Fallback to legacy behavior when schedule unknown
+        K *= 1.05 if ctx.rounds_scheduled == 5 else 1.00
+    # Result class multiplier (include DQ and TKO Doctor's Stoppage)
+    if mclass == 'KO_TKO':
+        K *= 1.125
+    elif mclass in {'SUB', 'TKO_DS'}:
         K *= 1.10
-    elif mclass in {'SD', 'MD'}:
+    elif mclass in {'SD', 'MD', 'DQ'}:
         K *= 0.95
     else:  # UD or other
         K *= 1.00
@@ -251,22 +267,34 @@ def k_factor(ctx: KContext) -> float:
     else:
         K *= 1.00
     # Finish-time boost
-    if mclass in {'KO', 'TKO', 'SUB'} and ctx.round_num and ctx.time_sec is not None:
-        T_max = max(1, ctx.rounds_scheduled) * 300
-        t_finish = max(0, (ctx.round_num - 1) * 300 + ctx.time_sec)
+    if mclass in {'KO_TKO', 'TKO_DS', 'SUB'} and ctx.round_num and ctx.time_sec is not None:
+        # Prefer true scheduled durations if available
+        if ctx.per_round_seconds and len(ctx.per_round_seconds) > 0:
+            idx = max(0, min(ctx.round_num - 1, len(ctx.per_round_seconds) - 1))
+            prior = sum(ctx.per_round_seconds[:idx])
+            cur_len = ctx.per_round_seconds[idx]
+            t_finish = max(0, prior + min(ctx.time_sec, cur_len))
+            T_max = max(1, sum(ctx.per_round_seconds))
+        else:
+            T_max = max(1, max(1, ctx.rounds_scheduled) * 300)
+            t_finish = max(0, (ctx.round_num - 1) * 300 + ctx.time_sec)
         u = max(0.0, min(1.0, t_finish / T_max))
         K *= 1.00 + 0.25 * (1.0 - u) ** 2
     return K
 
 
-def k_breakdown(ctx: KContext) -> dict[str, float | int | str]:
+def k_breakdown(ctx: KContext) -> dict[str, float | int | str | list[int]]:
     """Explain K calculation step-by-step for transparency/debugging.
 
     Returns a dict with base K, applied multipliers, method class, and final K.
     """
-    details: dict[str, float | int | str] = {}
+    details: dict[str, float | int | str | list[int]] = {}
     mclass = method_class(ctx.method)
     details['rounds_scheduled'] = ctx.rounds_scheduled
+    if ctx.total_scheduled_seconds is not None:
+        details['schedule_total_seconds'] = ctx.total_scheduled_seconds
+    if ctx.per_round_seconds is not None:
+        details['schedule_round_seconds'] = ctx.per_round_seconds
     details['method_class'] = mclass
     details['ufc_fights_before'] = ctx.ufc_fights_before
     details['days_since_last_fight'] = ctx.days_since_last_fight
@@ -277,16 +305,23 @@ def k_breakdown(ctx: KContext) -> dict[str, float | int | str]:
     details['base_K0'] = K0
 
     # Rounds multiplier
-    mult_rounds = 1.05 if ctx.rounds_scheduled == 5 else 1.00
+    if ctx.total_scheduled_seconds is not None and ctx.total_scheduled_seconds > 0:
+        base = 900
+        cap = 1500
+        delta = max(0, min(ctx.total_scheduled_seconds, cap) - base)
+        span = max(1, cap - base)
+        mult_rounds = 1.0 + 0.05 * (delta / span)
+    else:
+        mult_rounds = 1.05 if ctx.rounds_scheduled == 5 else 1.00
     K *= mult_rounds
     details['mult_rounds'] = mult_rounds
 
     # Result class multiplier
-    if mclass == 'KO':
-        mult_method = 1.15
-    elif mclass in {'SUB', 'TKO'}:
+    if mclass == 'KO_TKO':
+        mult_method = 1.125
+    elif mclass in {'SUB', 'TKO_DS'}:
         mult_method = 1.10
-    elif mclass in {'SD', 'MD'}:
+    elif mclass in {'SD', 'MD', 'DQ'}:
         mult_method = 0.95
     else:
         mult_method = 1.00
@@ -315,9 +350,16 @@ def k_breakdown(ctx: KContext) -> dict[str, float | int | str]:
 
     # Finish-time boost
     mult_finish = 1.00
-    if mclass in {'KO', 'TKO', 'SUB'} and ctx.round_num and ctx.time_sec is not None:
-        T_max = max(1, ctx.rounds_scheduled) * 300
-        t_finish = max(0, (ctx.round_num - 1) * 300 + ctx.time_sec)
+    if mclass in {'KO_TKO', 'TKO_DS', 'SUB'} and ctx.round_num and ctx.time_sec is not None:
+        if ctx.per_round_seconds and len(ctx.per_round_seconds) > 0:
+            idx = max(0, min(ctx.round_num - 1, len(ctx.per_round_seconds) - 1))
+            prior = sum(ctx.per_round_seconds[:idx])
+            cur_len = ctx.per_round_seconds[idx]
+            t_finish = max(0, prior + min(ctx.time_sec, cur_len))
+            T_max = max(1, sum(ctx.per_round_seconds))
+        else:
+            T_max = max(1, max(1, ctx.rounds_scheduled) * 300)
+            t_finish = max(0, (ctx.round_num - 1) * 300 + ctx.time_sec)
         u = max(0.0, min(1.0, t_finish / T_max))
         mult_finish = 1.00 + 0.25 * (1.0 - u) ** 2
         K *= mult_finish
@@ -343,6 +385,13 @@ class EloInputs:
     days_since_last_fight_1: int
     days_since_last_fight_2: int
     winner: int  # 1 or 2; 0 for draw; -1 for NC
+    # New: true schedule details for accurate K
+    schedule_total_seconds: Optional[int] = None
+    schedule_round_seconds: Optional[list[int]] = None
+    # Title context
+    is_title_fight: Optional[bool] = None
+    # 'capture' or 'defense' (optional; defaults to 'defense' if is_title_fight True and not provided)
+    title_bout_type: Optional[str] = None
 
 
 @dataclass
@@ -382,6 +431,9 @@ def update_elo(inputs: EloInputs) -> EloOutputs:
             days_since_last_fight=inputs.days_since_last_fight_1,
             round_num=inputs.round_num,
             time_sec=inputs.time_sec,
+            total_scheduled_seconds=inputs.schedule_total_seconds,
+            per_round_seconds=inputs.schedule_round_seconds,
+            is_title_fight=inputs.is_title_fight,
         )
     )
     K2 = k_factor(
@@ -392,8 +444,46 @@ def update_elo(inputs: EloInputs) -> EloOutputs:
             days_since_last_fight=inputs.days_since_last_fight_2,
             round_num=inputs.round_num,
             time_sec=inputs.time_sec,
+            total_scheduled_seconds=inputs.schedule_total_seconds,
+            per_round_seconds=inputs.schedule_round_seconds,
+            is_title_fight=inputs.is_title_fight,
         )
     )
+
+    # Title stakes multiplier on K (applied once, after base multipliers)
+    def _stakes_multiplier(is_title: bool | None, bout_type: str | None, Ew: float, PSw: float) -> float:
+        if not is_title:
+            return 1.0
+        # Explicit opt-out for special cases (e.g., stripped champion wins where belt stays vacant)
+        if (bout_type or '').lower() in {'none', 'neither', 'n/a'}:
+            return 1.0
+        # opponent quality signal (pre-fight parity)
+        q_comp = 2.0 * min(Ew, 1.0 - Ew)
+        # guardrail for big mismatches
+        if Ew >= 0.85:
+            q_comp = 0.0
+        # decisiveness from performance score
+        D = min(1.0, 2.0 * max(0.0, PSw - 0.5))
+        avg = 0.5 * (q_comp + D)
+        if (bout_type or '').lower() == 'capture':
+            f = 1.02 + 0.03 * avg
+            return max(1.02, min(1.05, f))
+        # default to defense
+        f = 1.01 + 0.02 * avg
+        return max(1.01, min(1.03, f))
+
+    if inputs.is_title_fight and inputs.winner in (1, 2):
+        # Winner-centric signals
+        Ew = E1 if inputs.winner == 1 else E2
+        PSw = inputs.PS1 if inputs.winner == 1 else inputs.PS2
+        f_title = _stakes_multiplier(inputs.is_title_fight, inputs.title_bout_type, Ew, PSw)
+        K1 *= f_title
+        K2 *= f_title
+
+    # Safety cap on per-fighter K to avoid rare extreme jumps after multipliers
+    MAX_K_MULT = 1.50  # cap at 1.5x base K0
+    K1 = min(K1, MAX_K_MULT * K0)
+    K2 = min(K2, MAX_K_MULT * K0)
 
     # Elo updates (not necessarily zero-sum when K1 != K2)
     R1_after = inputs.R1_before + K1 * (Y1 - E1)
@@ -402,14 +492,53 @@ def update_elo(inputs: EloInputs) -> EloOutputs:
     return EloOutputs(E1=E1, E2=E2, Y1=Y1, Y2=Y2, K1=K1, K2=K2, R1_after=R1_after, R2_after=R2_after)
 
 
+def _parse_schedule_from_time_format(tf_raw: str) -> tuple[int, list[int], Optional[int]]:
+    """Parse UFCStats time_format into (rounds_count, per_round_seconds, total_seconds).
+
+    Supports examples:
+    - "3 Rnd (5-5-5)"
+    - "5 Rnd (5-5-5-5-5)"
+    - "1 Rnd (12)"
+    - "1 Rnd + OT (12-3)"
+    - "1 Rnd + 2OT (15-3-3)"
+    - "No Time Limit"
+    """
+    tf = (tf_raw or '').strip().lower()
+    if not tf:
+        return 3, [300, 300, 300], 900
+    if 'no time limit' in tf:
+        return 3, [], None
+    # Extract numbers inside parentheses as minutes tokens
+    mins: list[int] = []
+    m = re.search(r'\(([^)]*)\)', tf)
+    if m:
+        body = m.group(1)
+        for tok in body.split('-'):
+            tok = tok.strip()
+            if tok.isdigit():
+                mins.append(int(tok))
+    # Determine number of segments
+    if mins:
+        per_round_sec = [max(0, mi * 60) for mi in mins]
+        total = sum(per_round_sec)
+        return len(per_round_sec), per_round_sec, total
+    # Fallback: infer from leading "N Rnd" without details; assume 5-min rounds
+    m2 = re.search(r'\b(\d+)\s*rnd\b', tf)
+    if m2:
+        n = int(m2.group(1))
+        n = max(1, min(n, 5))
+        per_round_sec = [300] * n
+        return n, per_round_sec, sum(per_round_sec)
+    # Default to 3 x 5
+    return 3, [300, 300, 300], 900
+
+
 def _rounds_scheduled_from_row(row: dict[str, Any]) -> int:
-    tf = (row.get('time_format') or '').lower()
-    if '5' in tf and 'rnd' in tf:
+    n, _secs, _total = _parse_schedule_from_time_format(row.get('time_format') or '')
+    # Title-fight override: if ambiguous 3 vs 5 and flagged title, bump to 5 segments
+    if n in (0, 3) and bool(row.get('is_title_fight', False)):
         return 5
-    # Fallback: title fights often 5 rounds
-    if bool(row.get('is_title_fight', False)):
-        return 5
-    return 3
+    return n
 
 
 def _winner_from_row(row: dict[str, Any]) -> int:
@@ -444,6 +573,8 @@ def compute_elo_from_row(row: dict[str, Any], extras: dict[str, Any]) -> EloOutp
     PS2 = float(ps['PS2'])
 
     rounds_scheduled = _rounds_scheduled_from_row(row)
+    # Parse detailed schedule for K calculations
+    _n, per_round_seconds, total_scheduled_seconds = _parse_schedule_from_time_format(row.get('time_format') or '')
     round_num = row.get('round_num')
     time_sec = row.get('time_sec')
     try:
@@ -472,5 +603,9 @@ def compute_elo_from_row(row: dict[str, Any], extras: dict[str, Any]) -> EloOutp
         days_since_last_fight_1=int(extras['days_since_last_fight_1']),
         days_since_last_fight_2=int(extras['days_since_last_fight_2']),
         winner=winner,
+        schedule_total_seconds=total_scheduled_seconds,
+        schedule_round_seconds=per_round_seconds,
+        is_title_fight=bool(row.get('is_title_fight', False)),
+        title_bout_type=str(row.get('title_bout_type', '') or '').lower() or None,
     )
     return update_elo(inp)

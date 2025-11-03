@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from decimal import Decimal
 from uuid import UUID
 
 from elo_calculator.domain.entities.base_entity import BaseEntityBase
@@ -12,4 +11,4 @@ class Promotion(BaseEntityBase):
     promotion_id: UUID
     name: str
     link: str | None = None
-    strength: Decimal | None = None
+    strength: float | None = None

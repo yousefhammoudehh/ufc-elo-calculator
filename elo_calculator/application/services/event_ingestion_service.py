@@ -199,6 +199,124 @@ class EventIngestionService(BaseService):
         return (list(fighters_seeded.values()), selected_events)
 
     @with_uow
+    async def ingest_fighters_by_links(self, uow: UnitOfWork, fighter_links: list[str]) -> list[Fighter]:
+        """Seed fighters directly from Tapology links.
+
+        For each link: scrape profile, compute starting ELO from pre-UFC bouts, persist fighter and bouts.
+        If the fighter already exists, ensure links are filled but do not recompute ELO.
+        """
+        sem = asyncio.Semaphore(3)
+        fighters_seeded: dict[str, Fighter] = {}
+        new_fighters: dict[str, Fighter] = {}
+
+        async def process(lnk: str) -> None:
+            async with sem:
+                await self._process_fighter_link(uow, lnk, fighters_seeded, new_fighters)
+
+        await asyncio.gather(*(process(lnk) for lnk in fighter_links))
+        return list(fighters_seeded.values())
+
+    @with_uow
+    async def ingest_fighter_by_link(  # noqa: PLR0912
+        self, uow: UnitOfWork, tapology_link: str, *, stats_link: str | None = None
+    ) -> Fighter:
+        """Seed a single fighter by Tapology link. Optionally pass a UFCStats link to skip searching.
+
+        - Scrapes profile and pre-UFC bouts
+        - Resolves stats_link only if not provided
+        - Computes starting ELO from pre-UFC bouts
+        - Persists fighter and pre-UFC bouts (idempotent; will not recompute ELO for existing fighters)
+        """
+        # If fighter already exists, ensure links but don't recompute ELO
+        existing = await self._get_existing_by_tapology_link(uow, tapology_link)
+        if existing:
+            # If caller supplies a stats_link, enforce consistency of IDs; do not silently change PKs
+            if stats_link:
+                token = _fighter_id_from_stats_link(stats_link)
+                if token and token != existing.fighter_id:
+                    raise ValueError(
+                        f'fighter exists with id={existing.fighter_id} but provided stats_link id={token}; '
+                        'refusing to change primary key. Delete/merge the fighter first.'
+                    )
+                # Update stored stats_link if missing or different from provided
+                if stats_link != existing.stats_link:
+                    cmd = (
+                        sa_update(uow.fighters.table)
+                        .where(uow.fighters.table.c.fighter_id == existing.fighter_id)
+                        .values(stats_link=stats_link)
+                        .returning(*uow.fighters.table.columns)
+                    )
+                    row = (await uow.connection.execute(cmd)).first()
+                    if row:
+                        existing = Fighter.from_dict(row._asdict())
+            return existing
+
+        # Scrape profile
+        await self._sleep_before_http()
+        profile: ScrapedFighterProfile = await asyncio.to_thread(self._fighter_scraper.get_profile, tapology_link)
+        pre_list = list(profile.iter_pre_ufc_bouts())
+
+        # Use provided stats_link if given, otherwise resolve
+        eff_stats = stats_link or profile.stats_link
+        if not eff_stats and isinstance(self._stats_search, StatsSearchScraper):
+            await self._sleep_before_http()
+            eff_stats = await asyncio.to_thread(self._stats_search.get_link_from_tapology, profile.tapology_link)
+        if not eff_stats and profile.name:
+            await self._sleep_before_http()
+            eff_stats = await asyncio.to_thread(self._stats_search.search_fighter, profile.name)
+
+        # Guard against duplicate/misspelled names: if a fighter already exists with the same name,
+        # prefer updating that record's links rather than creating a new one. If the provided stats_link
+        # token conflicts with the existing fighter's id, raise a clear error.
+        if profile.name:
+            try:
+                existing_by_name = await uow.fighters.get_by_name(profile.name)
+            except Exception:
+                existing_by_name = None
+            if existing_by_name:
+                token = _fighter_id_from_stats_link(eff_stats) if eff_stats else None
+                if token and token != existing_by_name.fighter_id:
+                    raise ValueError(
+                        'fighter with the same name already exists in database but with a different id. '
+                        f'name={profile.name!r} existing_id={existing_by_name.fighter_id} provided_stats_id={token}. '
+                        'Refusing to create a duplicate or change primary key. Merge or correct the record first.'
+                    )
+                # Patch links on the existing fighter (no ELO recompute) and persist pre-UFC bouts
+                updates: dict[str, Any] = {}
+                canon_tap = _canonicalize_tapology_link(profile.tapology_link) or profile.tapology_link
+                if canon_tap and (not existing_by_name.tapology_link or existing_by_name.tapology_link != canon_tap):
+                    updates['tapology_link'] = canon_tap
+                if eff_stats and (not existing_by_name.stats_link or existing_by_name.stats_link != eff_stats):
+                    updates['stats_link'] = eff_stats
+                if updates:
+                    cmd = (
+                        sa_update(uow.fighters.table)
+                        .where(uow.fighters.table.c.fighter_id == existing_by_name.fighter_id)
+                        .values(**updates)
+                        .returning(*uow.fighters.table.columns)
+                    )
+                    row = (await uow.connection.execute(cmd)).first()
+                    if row:
+                        existing_by_name = Fighter.from_dict(row._asdict())
+                # Attach pre-UFC bouts to the existing fighter id
+                await self._persist_pre_ufc_bouts(uow, existing_by_name.fighter_id, pre_list)
+                return existing_by_name
+
+        # Compute starting ELO and persist
+        promo_repo = await self._build_promotions_repo_for_bouts(uow, pre_list)
+        starting_elo = compute_starting_elo(pre_list, promotions_repo=promo_repo)
+        name = profile.name or _stable_id_from_link(profile.tapology_link)
+        fighter = await self._ensure_fighter(
+            uow,
+            name=name,
+            tapology_link=_canonicalize_tapology_link(profile.tapology_link) or profile.tapology_link,
+            stats_link=eff_stats,
+            starting_elo=starting_elo,
+        )
+        await self._persist_pre_ufc_bouts(uow, fighter.fighter_id, pre_list)
+        return fighter
+
+    @with_uow
     async def ingest_first_unseeded_events(
         self, uow: UnitOfWork, limit: int
     ) -> tuple[list[Fighter], list[Fighter], list[Event]]:

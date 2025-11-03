@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>UFC ELO – Dashboard</title>
+  <!-- Tailwind via CDN (no build step). For internal dashboards this is fine. -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+
+<body class="bg-slate-50 text-slate-900">
+  <!-- Navbar -->
+  <header class="sticky top-0 z-10 bg-white/90 backdrop-blur border-b border-slate-200">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+      <a href="#/" class="font-semibold text-lg">UFC ELO</a>
+      <nav class="hidden md:flex items-center gap-4 text-sm">
+        <a class="nav-link" href="#/">Home</a>
+        <a class="nav-link" href="#/rankings">Rankings</a>
+        <a class="nav-link" href="#/fighters">Fighters</a>
+        <a class="nav-link" href="#/events">Events</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Page container -->
+  <main class="max-w-7xl mx-auto px-4 py-6">
+    <h1 class="text-2xl font-semibold mb-4">Overview</h1>
+
+    <!-- Grid: Latest Event | In-Form | Highlights -->
+    <section id="row-top" class="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+      <!-- Latest Event Info (hero) -->
+      <div id="card-latest" class="card min-h-[180px]"></div>
+
+      <!-- In-Form Fighters -->
+      <div id="card-inform" class="card"></div>
+
+      <!-- Highlights mini-cards -->
+      <div id="card-highlights" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-4"></div>
+    </section>
+
+    <!-- Current / Peak Rankings row -->
+    <section id="row-rankings" class="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div id="card-rankings" class="card"></div>
+      <div id="card-shocks" class="card"></div>
+    </section>
+  </main>
+
+  <!-- Scripts (order matters) -->
+  <script type="module" src="./api.js"></script>
+  <script type="module" src="./views/components/skeleton.js"></script>
+  <script type="module" src="./views/components/error.js"></script>
+  <script type="module" src="./views/home.js"></script>
+  <script type="module" src="./app.js"></script>
+</body>
+
+</html>

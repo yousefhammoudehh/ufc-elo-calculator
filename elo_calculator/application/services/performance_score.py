@@ -63,6 +63,14 @@ def _share(a: float, b: float, prior: float) -> float:
     return (a + p) / denom
 
 
+def _clip01(x: float) -> float:
+    return max(0.0, min(1.0, float(x)))
+
+
+def _clip_pct(x: float) -> float:
+    return max(0.0, min(100.0, float(x)))
+
+
 def compute_ps_from_row(row: dict[str, Any], *, constants: PSConstants = PSConstants()) -> dict[str, Any]:
     """Compute Performance Scores (PS1, PS2) from a row with fighter1_* and fighter2_* stats.
 
@@ -99,8 +107,25 @@ def compute_ps_from_row(row: dict[str, Any], *, constants: PSConstants = PSConst
     ctrl2 = float(row.get('fighter2_ctrl', 0) or 0)
 
     # Accuracy proxies (Sig%)
-    sigpct1 = _as_pct(row.get('fighter1_sig_strike_percent'))
-    sigpct2 = _as_pct(row.get('fighter2_sig_strike_percent'))
+    # Recompute Sig% from landed/attempted when attempts are available.
+    sig_l1 = float(row.get('fighter1_sig_strikes', 0) or 0)
+    sig_a1 = float(row.get('fighter1_sig_strikes_thrown', 0) or 0)
+    sig_l2 = float(row.get('fighter2_sig_strikes', 0) or 0)
+    sig_a2 = float(row.get('fighter2_sig_strikes_thrown', 0) or 0)
+
+    if sig_a1 > 0:
+        sigpct1 = 100.0 * sig_l1 / max(1.0, sig_a1)
+    else:
+        sigpct1 = _as_pct(row.get('fighter1_sig_strike_percent'))
+
+    if sig_a2 > 0:
+        sigpct2 = 100.0 * sig_l2 / max(1.0, sig_a2)
+    else:
+        sigpct2 = _as_pct(row.get('fighter2_sig_strike_percent'))
+
+    # sanitize: clip to [0, 100]
+    sigpct1 = _clip_pct(sigpct1)
+    sigpct2 = _clip_pct(sigpct2)
 
     # TD efficiency (percent); try direct percent if present
     tdpct1 = _as_pct(row.get('fighter1_td_percent'))
@@ -133,27 +158,40 @@ def compute_ps_from_row(row: dict[str, Any], *, constants: PSConstants = PSConst
 
     # Dominance components
     S_CTRL = _share(ctrl1, ctrl2, constants.CTRL_PRIOR)
-    # Quality gates (per fighter)
-    q_raw_1 = 0.65 * S_GDMG + 0.35 * (1.0 if sub1 > 0 else 0.0)
-    q_raw_2 = 0.65 * (1.0 - S_GDMG) + 0.35 * (1.0 if sub2 > 0 else 0.0)
-    q_ctrl_1 = 0.10 + 0.90 * min(1.0, max(0.0, q_raw_1))
-    q_ctrl_2 = 0.10 + 0.90 * min(1.0, max(0.0, q_raw_2))
+    # Quality gates (per fighter) with clinch component and sub threat
+    # Fighter 1’s own ground/clinch damage shares
+    S_GDMG1 = S_GDMG
+    S_CDMG1 = S_CDMG
+    # Fighter 2’s own shares are complementary
+    S_GDMG2 = 1.0 - S_GDMG
+    S_CDMG2 = 1.0 - S_CDMG
+
+    q_raw_1 = 0.50 * S_GDMG1 + 0.15 * S_CDMG1 + 0.35 * (1.0 if sub1 > 0 else 0.0)
+    q_raw_2 = 0.50 * S_GDMG2 + 0.15 * S_CDMG2 + 0.35 * (1.0 if sub2 > 0 else 0.0)
+    q_ctrl_1 = 0.10 + 0.90 * _clip01(q_raw_1)
+    q_ctrl_2 = 0.10 + 0.90 * _clip01(q_raw_2)
     S_CTRLQ1 = S_CTRL * q_ctrl_1
     S_CTRLQ2 = (1.0 - S_CTRL) * q_ctrl_2
 
-    # TD% share and half-credit rule
+    # TD% share and continuous follow-up gate (replaces flat half-credit)
     S_TDp = _share(tdpct1, tdpct2, constants.PCT_PRIOR)
     S_TDp1 = S_TDp
     S_TDp2 = 1.0 - S_TDp
-    if (ground1 + sub1) == 0:
-        S_TDp1 *= 0.5
-    if (ground2 + sub2) == 0:
-        S_TDp2 *= 0.5
+    # Continuous gating per fighter, then renormalize
+    gate1 = 0.25 + 0.75 * min(1.0, S_GDMG1 + 0.25 * (1.0 if sub1 > 0 else 0.0))
+    gate2 = 0.25 + 0.75 * min(1.0, S_GDMG2 + 0.25 * (1.0 if sub2 > 0 else 0.0))
+    S_TDp1 *= gate1
+    S_TDp2 *= gate2
+    total_tdp = S_TDp1 + S_TDp2
+    if total_tdp > 0:
+        S_TDp1 /= total_tdp
+        S_TDp2 /= total_tdp
 
     S_REV = _share(rev1, rev2, constants.REV_PRIOR)
 
     # Duration-quality (shared form as spec for fighter 1)
-    S_DUR = S_CTRL * (0.5 + 0.5 * ((S_GDMG + S_CDMG) / 2.0))
+    # Less credit for control without impact
+    S_DUR = S_CTRL * (0.25 + 0.75 * ((S_GDMG + S_CDMG) / 2.0))
 
     # Assemble PS per fighter
     PS1 = (

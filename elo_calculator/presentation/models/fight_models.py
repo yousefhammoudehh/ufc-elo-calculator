@@ -50,7 +50,7 @@ class FightScrapeResultResponse(BaseModel):
     bouts_created: int
     participants_created: int
     fighters_updated: int
-    fights: list[FightEloTraceResponse]
+    fights: list[FightEloTraceResponse] | None = None
 
     @staticmethod
     def from_service(r: FightScrapeResult) -> FightScrapeResultResponse:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 from uuid import UUID
 
@@ -25,6 +26,58 @@ class EventEloResult:
 
 
 class EventEloService(BaseService):
+    @staticmethod
+    async def _prior_title_fights(
+        uow: UnitOfWork, fighter_id: str, before_event_date: date
+    ) -> list[tuple[date, FightOutcome | None]]:
+        out: list[tuple[date, FightOutcome | None]] = []
+        if not before_event_date:
+            return out
+        parts = await uow.bout_participants.get_by_fighter_id(fighter_id)
+        for bp in parts:
+            b = await uow.bouts.get_by_bout_id(bp.bout_id)
+            if not b or not b.is_title_fight or not b.event_id:
+                continue
+            ev = await uow.events.get_by_event_id(b.event_id)
+            if not ev or not ev.event_date:
+                continue
+            if ev.event_date < before_event_date:
+                out.append((ev.event_date, bp.outcome))
+        out.sort(key=lambda t: t[0], reverse=True)
+        return out
+
+    @staticmethod
+    def _entered_as_champion(priors_desc: list[tuple[date, FightOutcome | None]]) -> bool:
+        # Most recent decisive prior result determines status; ignores DRAW/NC.
+        for _d, outcome in priors_desc:
+            if outcome == FightOutcome.WIN:
+                return True
+            if outcome == FightOutcome.LOSS:
+                return False
+        return False
+
+    @staticmethod
+    def _unification_winner_is_undisputed(
+        winner_priors_desc: list[tuple[date, FightOutcome | None]],
+        loser_priors_desc: list[tuple[date, FightOutcome | None]],
+    ) -> bool:
+        def count_wins(priors: list[tuple[date, FightOutcome | None]]) -> int:
+            return sum(1 for _d, o in priors if o == FightOutcome.WIN)
+
+        def first_win_date(priors: list[tuple[date, FightOutcome | None]]) -> date | None:
+            wins: list[date] = [d for d, o in priors if o == FightOutcome.WIN]
+            return min(wins) if wins else None
+
+        cw = count_wins(winner_priors_desc)
+        cl = count_wins(loser_priors_desc)
+        if cw != cl:
+            return cw > cl
+        fw = first_win_date(winner_priors_desc)
+        fl = first_win_date(loser_priors_desc)
+        if fw and fl and fw != fl:
+            return fw < fl
+        return True
+
     @with_uow
     async def seed_events_by_ids(self, uow: UnitOfWork, event_ids: list[UUID]) -> list[EventEloResult]:
         results: list[EventEloResult] = []
@@ -95,6 +148,27 @@ class EventEloService(BaseService):
 
         # Build row for compute_elo_from_row
         row = self._build_row(bout, p1, p2)
+
+        # Attach title_bout_type for Elo per walkout status if title fight and clear winner
+        if bool(bout.is_title_fight) and evt and getattr(evt, 'event_date', None):
+            winner_pid: str | None = None
+            loser_pid: str | None = None
+            if p1.outcome == FightOutcome.WIN and p2.outcome != FightOutcome.WIN:
+                winner_pid, loser_pid = p1.fighter_id, p2.fighter_id
+            elif p2.outcome == FightOutcome.WIN and p1.outcome != FightOutcome.WIN:
+                winner_pid, loser_pid = p2.fighter_id, p1.fighter_id
+            if winner_pid and loser_pid:
+                priors_w = await self._prior_title_fights(uow, winner_pid, evt.event_date)
+                priors_l = await self._prior_title_fights(uow, loser_pid, evt.event_date)
+                entered_w = self._entered_as_champion(priors_w)
+                entered_l = self._entered_as_champion(priors_l)
+                if entered_w and entered_l:
+                    winner_is_undisputed = self._unification_winner_is_undisputed(priors_w, priors_l)
+                    row['title_bout_type'] = 'defense' if winner_is_undisputed else 'capture'
+                elif entered_w:
+                    row['title_bout_type'] = 'defense'
+                else:
+                    row['title_bout_type'] = 'capture'
 
         outputs = compute_elo_from_row(
             row,

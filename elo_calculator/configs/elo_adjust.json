@@ -1,0 +1,43 @@
+{
+  "ridge": {
+    "beta": {
+      "fi_diff": 0.12,
+      "sos_diff": 0.08,
+      "cons_diff": -0.05,
+      "rest_diff": 0.03,
+      "five_round": 0.02,
+      "title": 0.02
+    },
+    "mu": {
+      "fi_diff": 0.0,
+      "sos_diff": 0.0,
+      "cons_diff": 0.0,
+      "rest_diff": 0.0,
+      "five_round": 0.0,
+      "title": 0.0
+    },
+    "sigma": {
+      "fi_diff": 1.0,
+      "sos_diff": 1.0,
+      "cons_diff": 1.0,
+      "rest_diff": 1.0,
+      "five_round": 1.0,
+      "title": 1.0
+    }
+  },
+  "meta": {
+    "bias": 0.0,
+    "elo_diff": 1.0,
+    "fi_diff": 0.08,
+    "sos_diff": 0.06,
+    "cons_diff": -0.04,
+    "rest_diff": 0.02
+  },
+  "platt": { "a": 1.02, "b": -0.01 },
+  "cap_elo": 30.0,
+  "cap_logit": 0.25,
+  "feature_order": [
+    "fi_diff", "sos_diff", "cons_diff", "rest_diff", "five_round", "title"
+  ],
+  "alpha_recent": 0.20
+}

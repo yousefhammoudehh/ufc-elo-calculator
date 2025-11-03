@@ -97,7 +97,7 @@ class FightScrapeService(BaseService):
 
     @with_uow
     async def scrape_event_fights_and_seed(
-        self, uow: UnitOfWork, event_id: UUID, *, strict: bool = False
+        self, uow: UnitOfWork, event_id: UUID, *, strict: bool = True
     ) -> FightScrapeResult:
         evt = await uow.events.get_by_event_id(event_id)
         if not evt or not evt.event_stats_link:
@@ -117,6 +117,7 @@ class FightScrapeService(BaseService):
         elo_overrides: dict[str, float] = {}
 
         # Process from the first fight on the card to the main event
+        processed = 0
         for idx, link in enumerate(reversed(fight_links), start=1):
             try:
                 scraped = self._scraper.get_fight(link, evt.event_date)
@@ -159,26 +160,25 @@ class FightScrapeService(BaseService):
                     except Exception:
                         pass
                     return f, f.fighter_id
-                # 3) Best-effort by name if provided (older ingestions may lack stats_link and use hashed PKs)
-                if name:
-                    try:
-                        f = await uow.fighters.get_by_name(name)
-                        if f:
-                            return f, f.fighter_id
-                    except Exception:
-                        pass
+                # Do NOT fallback to fuzzy/name matching — this risks misattribution.
                 return None, None
 
             f1, f1_db_id = await _resolve_fighter(f1_token, getattr(scraped.fighter1, 'name', None))
             f2, f2_db_id = await _resolve_fighter(f2_token, getattr(scraped.fighter2, 'name', None))
-            if not f1 or not f2 or not f1_db_id or not f2_db_id:
-                logger.info(
-                    f'Fighter not found for fight; skipping link={link} f1_token={f1_token} f2_token={f2_token}'
-                )
-                if strict:
-                    raise ValueError(
-                        f'Fighter not found for fight: link={link} f1_token={f1_token} f2_token={f2_token}'
+            if not f1 or not f1_db_id or not f2 or not f2_db_id:
+                missing: list[str] = []
+                if not f1 or not f1_db_id:
+                    missing.append(
+                        f'fighter (id={f1_token}, name={getattr(scraped.fighter1, "name", None)}) not found in database'
                     )
+                if not f2 or not f2_db_id:
+                    missing.append(
+                        f'fighter (id={f2_token}, name={getattr(scraped.fighter2, "name", None)}) not found in database'
+                    )
+                msg = f'; '.join(missing) + f'; event_id={evt.event_id} link={link}'
+                logger.error(msg)
+                if strict:
+                    raise ValueError(msg)
                 continue
 
             # Upsert bout
@@ -188,6 +188,7 @@ class FightScrapeService(BaseService):
                     bout_id=scraped.fight_id,
                     event_id=evt.event_id,
                     is_title_fight=scraped.is_title_fight,
+                    weight_class_code=scraped.weight_class_code,
                     method=scraped.method,
                     round_num=scraped.round_num,
                     time_sec=scraped.time_sec,
@@ -202,6 +203,7 @@ class FightScrapeService(BaseService):
                     .where(uow.bouts.table.c.bout_id == bout.bout_id)
                     .values(
                         is_title_fight=bool(scraped.is_title_fight),
+                        weight_class_code=scraped.weight_class_code,
                         method=scraped.method,
                         round_num=scraped.round_num,
                         time_sec=scraped.time_sec,
@@ -366,6 +368,8 @@ class FightScrapeService(BaseService):
                 },
             )
 
+            processed += 1
+
             # Record trace regardless of dry_run
             # Prepare convenience getters
             def _i(val: int | None) -> int:
@@ -474,10 +478,19 @@ class FightScrapeService(BaseService):
                 pass
 
         # Mark event
-        try:
-            await uow.events.update(evt.event_id, {'fights_seeded': True})
-        except Exception:
-            logger.warning(f'Failed to mark event fights_seeded: event_id={evt.event_id}')
+        # Only mark fights_seeded when all fights were successfully processed
+        if processed != len(fight_links):
+            msg = (
+                f'Event fights not fully seeded: event_id={evt.event_id} processed={processed} total={len(fight_links)}'
+            )
+            logger.error(msg)
+            if strict:
+                raise RuntimeError(msg)
+        else:
+            try:
+                await uow.events.update(evt.event_id, {'fights_seeded': True})
+            except Exception:
+                logger.warning(f'Failed to mark event fights_seeded: event_id={evt.event_id}')
 
         # Persistence is enabled by default; no rollback-only mode
 
@@ -522,7 +535,7 @@ class FightScrapeService(BaseService):
         results: list[FightScrapeResult] = []
         for evt in selected:
             # Process with strict behavior; bubble up any error to stop everything
-            res = await self.scrape_event_fights_and_seed(evt.event_id, strict=strict)  # type: ignore[arg-type]
+            res = await self.scrape_event_fights_and_seed(evt.event_id, strict=strict)
             results.append(res)
         return results
 

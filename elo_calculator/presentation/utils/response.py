@@ -49,13 +49,19 @@ def get_response[T, B: DataType](
 ) -> CustomJSONResponse:
     serialized_data: dict[str, Any] | list[dict[str, Any]] | None = None
 
-    if data is not None:
-        if isinstance(data, Sequence) and not isinstance(data, str):
-            serialized_data = [item.model_dump() if isinstance(item, BaseModel) else item for item in data]
-        elif isinstance(data, BaseModel):
-            serialized_data = data.model_dump()
-        elif isinstance(data, dict):
-            serialized_data = data
+    def serialize_value(val: Any) -> Any:
+        if isinstance(val, BaseModel):
+            return val.model_dump()
+        if isinstance(val, Sequence) and not isinstance(val, (str, bytes, bytearray)):
+            return [serialize_value(x) for x in val]
+        if isinstance(val, dict):
+            return {k: serialize_value(v) for k, v in val.items()}
+        return val
+
+    if data is not None and isinstance(data, (BaseModel, Sequence, dict)):
+        serialized = serialize_value(data)
+        # Assign, allowing mixed types; JSON encoder will handle primitives
+        serialized_data = cast(Any, serialized)
     content: dict[str, Any] = {'status_code': status_code, 'message': message}
     if serialized_data is not None:
         content['data'] = serialized_data

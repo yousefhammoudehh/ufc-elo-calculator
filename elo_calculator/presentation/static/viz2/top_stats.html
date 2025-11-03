@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Top Stats — UFC ELO</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+      :root { --bg: #0b0e13; --card: #141a22; --text: #e5eef8; --muted: #9fb3c8; --accent: #3ba3ff; }
+      body { margin: 0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); }
+      .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+      .grid { display:grid; grid-template-columns: 1fr; gap:24px; }
+      @media(min-width: 960px){ .grid.two { grid-template-columns: 1fr 1fr; } }
+      .card { background: var(--card); border: 1px solid #1f2937; border-radius: 12px; padding: 16px; box-shadow: 0 1px 12px rgba(0,0,0,0.2); position: relative; }
+      h1 { font-size: 18px; margin: 0 0 12px; }
+      h2 { font-size: 16px; color: var(--muted); margin: 8px 0 12px; }
+      .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; position:relative; z-index:1; }
+      label { display:inline-flex; align-items:center; gap:8px; color: var(--text); }
+      input, select, button { font-family: inherit; font-size: 14px; }
+      input[type="number"], input[type="text"], select {
+        background:#0d1218; color:var(--text); border:1px solid #1f2937;
+        border-radius:8px; padding:8px 10px; outline:none;
+      }
+      input::placeholder { color:#5f7185; }
+      button { background:#1f2937; color:#e5eef8; border:1px solid #2b3a4d; border-radius:8px; padding:8px 12px; font-weight:600; cursor:pointer; }
+      button:hover { background:#243244; border-color:#33465d; }
+      #tsApply { background:#3b82f6; border-color:#3b82f6; }
+      #tsApply:hover { background:#3373d9; }
+      #tsPrev, #tsNext { white-space:nowrap; }
+      table { width:100%; border-collapse: collapse; }
+      th, td { padding:8px; border-bottom:1px solid #1f2937; text-align:left; }
+      th { color: var(--muted); font-weight:600; font-size:13px; }
+      td.val, th.val { text-align:right; font-variant-numeric: tabular-nums; }
+      a.link-muted, a.link-muted:visited, a.link-muted:active { color: var(--text); text-decoration: none; border-bottom:1px dashed transparent; }
+      a.link-muted:hover { color: var(--accent); border-bottom-color: var(--accent); }
+      .loader-overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background: rgba(11,14,19,0.6); backdrop-filter: blur(3px); z-index:5; }
+      .loader { display:inline-flex; align-items:center; gap:10px; color: var(--muted); font-weight:600; }
+      .spinner { width:18px; height:18px; border:3px solid #1f2937; border-top-color: var(--accent); border-radius:50%; animation: spin .9s linear infinite; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+  </head>
+  <body>
+    <div id="topNavHost"></div>
+    <div class="container">
+      <h1>Top Stats</h1>
+      <div class="card" style="margin-bottom:12px;">
+        <div class="row">
+          <label>Since year <input id="tsSince" type="number" min="1900" placeholder="YYYY" style="width:100px;" /></label>
+          <label>Division
+            <select id="tsDivisionSel" style="min-width:160px;"></select>
+          </label>
+          <label>Rate
+            <select id="tsRate"><option value="total">Totals</option><option value="per15">Per 15</option></select>
+          </label>
+          <label><input id="tsAdjusted" type="checkbox" /> Adjusted (opponent diff.)</label>
+          
+          <label>Metric
+            <select id="tsMetric" style="min-width:200px;"></select>
+          </label>
+          <div style="flex:1 1 auto"></div>
+          <button id="tsApply">Apply</button>
+        </div>
+        <small style="color:var(--muted); display:block; margin-top:8px;">Filter top lists: set a start year, restrict to a division (weight class code), choose totals or per‑15, and toggle adjusted (per‑minute differential vs opponent in the same fight).</small>
+      </div>
+      <div id="statsHost"></div>
+      <small style="color:var(--muted); display:block; margin-top:6px;">Top-10 lists by total UFC stats across categories (e.g., takedowns, control time). Switch metrics in the cards to explore.</small>
+    </div>
+    <script src="./app.js"></script>
+    <script src="./nav.js"></script>
+    <script src="./top_stats.js"></script>
+  </body>
+  </html>

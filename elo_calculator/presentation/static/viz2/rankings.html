@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Rankings Over Time — UFC ELO</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+      :root { --bg: #0b0e13; --card: #141a22; --text: #e5eef8; --muted: #9fb3c8; --accent: #3ba3ff; }
+      body { margin: 0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); }
+      .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+      .card { background: var(--card); border: 1px solid #1f2937; border-radius: 12px; padding: 16px; box-shadow: 0 1px 12px rgba(0,0,0,0.2); position: relative; overflow: hidden; }
+      .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+      button { background: var(--accent); color: white; border: 0; border-radius: 8px; padding: 10px 14px; font-weight: 600; cursor: pointer; }
+      small { color: var(--muted); }
+      h1 { font-size: 18px; margin: 0 0 12px; }
+      table.leaderboard { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      table.leaderboard th, table.leaderboard td { padding: 8px; border-bottom: 1px solid #1f2937; text-align: left; }
+      table.leaderboard thead th { color: var(--muted); font-weight: 600; font-size: 13px; }
+      #tblRankingsYear thead th:nth-child(4), #tblRankingsYear tbody td:nth-child(4) { text-align: right; font-variant-numeric: tabular-nums; }
+      tr.podium-gold { background: rgba(255,215,0,0.08); }
+      tr.podium-silver { background: rgba(192,192,192,0.08); }
+      tr.podium-bronze { background: rgba(205,127,50,0.08); }
+      a.link-muted,
+      a.link-muted:visited,
+      a.link-muted:active { color: var(--text); text-decoration: none; border-bottom: 1px dashed transparent; }
+      a.link-muted:hover { color: var(--accent); border-bottom-color: var(--accent); text-decoration: none; }
+      .loader-overlay { position: absolute; inset: 0; display:flex; align-items:center; justify-content:center; background: rgba(11,14,19,0.6); backdrop-filter: blur(3px); z-index: 5; }
+      .loader { display:inline-flex; align-items:center; gap:10px; color: var(--muted); font-weight: 600; }
+      .spinner { width: 18px; height: 18px; border: 3px solid #1f2937; border-top-color: var(--accent); border-radius: 50%; animation: spin 0.9s linear infinite; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+  </head>
+  <body>
+    <div id="topNavHost"></div>
+    <div class="container">
+      <div class="card">
+        <h1>Rankings Over Time</h1>
+        <div class="row" style="gap:12px; margin-bottom:12px;">
+          <a href="/viz/index.html" style="text-decoration:none;"><button style="background:#374151">← Back</button></a>
+          <button id="btnFirstYear" style="background:#374151">« First</button>
+          <button id="btnPrevYear" style="background:#374151">‹ Prev</button>
+          <label for="rankYear" style="color:var(--muted);">Year: <span id="rankYearLabel"></span></label>
+          <input id="rankYear" type="range" min="2000" max="2025" value="2025" step="1" />
+          <select id="rankYearSelect" style="background:#0d1218;color:var(--text);border:1px solid #1f2937;border-radius:8px;padding:6px 8px;"></select>
+          <button id="btnNextYear" style="background:#374151">Next ›</button>
+          <button id="btnLastYear" style="background:#374151">Last »</button>
+          <span style="flex:1"></span>
+          <label style="color:var(--muted);">Metric:
+            <select id="rankMetric" style="background:#0d1218;color:var(--text);border:1px solid #1f2937;border-radius:8px;padding:6px 8px;">
+              <option value="elo">Top ELO</option>
+              <option value="gains">Top Gains</option>
+            </select>
+          </label>
+          <label style="color:var(--muted); display:flex; align-items:center; gap:6px;">
+            <input id="rankFull" type="checkbox" /> Full list
+          </label>
+        </div>
+        <table id="tblRankingsYear" class="leaderboard">
+          <thead>
+            <tr id="tblRankingsYearHead"><th>Rank</th><th>Fighter</th><th>Record</th><th>ELO</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <small style="color:var(--muted); display:block; margin-top:6px;">This snapshot shows the top ELO or top ELO gains at year-end. Use the controls to navigate years or switch metrics.</small>
+        <div class="row" style="justify-content: flex-end; margin-top: 8px;">
+          <button id="btnViewMore" style="background:#374151">View more</button>
+        </div>
+      </div>
+    </div>
+    <script src="./app.js"></script>
+    <script src="./nav.js"></script>
+    <script src="./rankings.js"></script>
+  </body>
+  </html>

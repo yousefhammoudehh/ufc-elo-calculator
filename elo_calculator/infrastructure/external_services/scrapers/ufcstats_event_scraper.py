@@ -10,6 +10,7 @@ from bs4 import BeautifulSoup
 
 from elo_calculator.configs.log import get_logger
 from elo_calculator.domain.client.models import ScrapedFight, ScrapedFightFighter
+from elo_calculator.domain.shared.enumerations import WeightClassCode
 from elo_calculator.infrastructure.external_services.scrapers.base_scraper import fetch_html, parse_with_bs
 
 logger = get_logger()
@@ -152,8 +153,9 @@ class UFCStatsEventScraper:
                 time_format = tf.split('Referee:')[0].strip() if 'Referee:' in tf else tf.strip()
         except Exception:
             pass
-        # Title fight detection
+        # Title fight detection and weight class parsing
         is_title = False
+        title_text = ''
         try:
             title_el = soup.find('i', class_='b-fight-details__fight-title')
             title_text = title_el.get_text(separator=' ', strip=True).lower() if title_el else ''
@@ -418,6 +420,42 @@ class UFCStatsEventScraper:
                     pass
         # Convert time string
         time_seconds = _time_to_seconds(meta.time_str)
+        # Parse weight class from page text/title
+        weight_code: int | None = None
+        try:
+            title_el = soup.find('i', class_='b-fight-details__fight-title')
+            text = title_el.get_text(' ', strip=True).lower() if title_el else soup.get_text(' ', strip=True).lower()
+            # Strategy: find phrase ending with 'weight', handle 'catch'/'open' cases, detect women's divisions
+            is_women = ('women' in text) or ("women's" in text)
+            # Openweight / catchweight
+            if 'catch' in text or 'open' in text:
+                weight_code = int(WeightClassCode.OPENWEIGHT)
+            else:
+                # Specific phrases first
+                if 'strawweight' in text:
+                    weight_code = int(WeightClassCode.WOMEN_STRAWWEIGHT)
+                elif 'light heavyweight' in text:
+                    weight_code = int(WeightClassCode.MEN_LIGHT_HEAVYWEIGHT)
+                elif 'heavyweight' in text:
+                    weight_code = int(WeightClassCode.MEN_HEAVYWEIGHT)
+                elif 'middleweight' in text:
+                    weight_code = int(WeightClassCode.MEN_MIDDLEWEIGHT)
+                elif 'welterweight' in text:
+                    weight_code = int(WeightClassCode.MEN_WELTERWEIGHT)
+                elif 'lightweight' in text:
+                    weight_code = int(WeightClassCode.MEN_LIGHTWEIGHT)
+                elif 'featherweight' in text:
+                    weight_code = int(
+                        WeightClassCode.WOMEN_FEATHERWEIGHT if is_women else WeightClassCode.MEN_FEATHERWEIGHT
+                    )
+                elif 'bantamweight' in text:
+                    weight_code = int(
+                        WeightClassCode.WOMEN_BANTAMWEIGHT if is_women else WeightClassCode.MEN_BANTAMWEIGHT
+                    )
+                elif 'flyweight' in text:
+                    weight_code = int(WeightClassCode.WOMEN_FLYWEIGHT if is_women else WeightClassCode.MEN_FLYWEIGHT)
+        except Exception:
+            weight_code = None
         return ScrapedFight(
             fight_id=fight_id,
             method=meta.method,
@@ -428,4 +466,5 @@ class UFCStatsEventScraper:
             fighter1=f1,
             fighter2=f2,
             is_title_fight=meta.is_title_fight,
+            weight_class_code=weight_code,
         )

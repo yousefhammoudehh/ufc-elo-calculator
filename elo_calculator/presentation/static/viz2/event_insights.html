@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Event Insights</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+      :root { --bg: #0b0e13; --card: #141a22; --text: #e5eef8; --muted: #9fb3c8; --accent: #3ba3ff; }
+      body { margin: 0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); }
+      .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+      .card { background: var(--card); border: 1px solid #1f2937; border-radius: 12px; padding: 16px; box-shadow: 0 1px 12px rgba(0,0,0,0.2); position: relative; }
+      .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+      .title { font-size: 18px; font-weight: 600; margin: 0 0 8px; }
+      select, input { background:#0d1218; color:var(--text); border:1px solid #1f2937; border-radius:8px; padding:8px 10px; }
+      button { background:#3b82f6; color:white; border:0; border-radius:8px; padding:8px 12px; font-weight:600; }
+      small.expl { display:block; color:var(--muted); margin-top:6px; }
+      table { width:100%; border-collapse: collapse; }
+      th, td { padding:8px; border-bottom:1px solid #1f2937; text-align:left; }
+      th { color:var(--muted); }
+      .grid { display:grid; grid-template-columns: 1fr; gap:24px; }
+      @media(min-width: 960px){ .grid.two { grid-template-columns: 1fr 1fr; } }
+      a.link-muted, a.link-muted:visited, a.link-muted:active { color: var(--text); text-decoration: none; border-bottom:1px dashed transparent; }
+      a.link-muted:hover { color: var(--accent); border-bottom-color: var(--accent); }
+      .delta.pos { color: #34d399; font-weight:600; }
+      .delta.neg { color: #f87171; font-weight:600; }
+      .badge { display:inline-block; padding: 2px 8px; border-radius: 999px; background:#1f2937; font-size:12px; color: var(--text); }
+      .badge.title { background: rgba(255,215,0,0.15); color: #ffd700; border: 1px solid rgba(255,215,0,0.35); }
+      ::selection { background: rgba(59,163,255,0.25); color: inherit; }
+      a::selection { background: rgba(59,163,255,0.25); }
+    </style>
+    <script src="./nav.js" defer></script>
+  </head>
+  <body>
+    <div id="topNavHost"></div>
+    <div class="container">
+      <div class="card" style="margin-bottom:16px;">
+        <div class="title">Event Insights</div>
+        <div class="row">
+          <select id="eventSelect"></select>
+          <button id="loadEventBtn">Load</button>
+          <button id="loadLatestBtn" style="background:#374151">Load Latest</button>
+        </div>
+        <small class="expl">Select an event to see overall Shock Index and Net ELO Transfer. Higher shock means more upsets.</small>
+      </div>
+
+      <div class="card">
+        <div class="title" id="eventTitle"></div>
+        <div id="eventMeta" style="color:var(--muted);"></div>
+        <div id="shockBlock" style="margin-top:8px;"></div>
+        <div id="analysisBlock" style="margin-top:8px; color:var(--muted);"></div>
+        <small class="expl">Shock Index sums the surprise of winners based on pre‑fight ELO odds (−log p). Net Transfer aggregates absolute ELO movement across the card.</small>
+      </div>
+
+      <div class="card" style="margin-top:16px;">
+        <div class="title">Bout ELO Swings</div>
+        <table id="tblBoutSwings">
+          <thead>
+            <tr><th>Bout</th><th>Outcomes</th><th>Δ ELO (F1 / F2)</th><th>Open</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <small class="expl">Event overview of ELO swings per bout. Title bouts are highlighted; open a bout for a detailed breakdown.</small>
+      </div>
+
+      <div class="grid two" style="gap:24px; margin-top:16px;">
+        <div class="card">
+          <div class="title">Top 5 most shocking events</div>
+          <table id="tblMostShocking"><thead><tr><th>Event</th><th>Shock</th><th>Transfer</th></tr></thead><tbody></tbody></table>
+          <small class="expl">Highest Shock Index cards (more upsets).</small>
+        </div>
+        <div class="card">
+          <div class="title">Top 5 most predictable events</div>
+          <table id="tblMostPredictable"><thead><tr><th>Event</th><th>Shock</th><th>Transfer</th></tr></thead><tbody></tbody></table>
+          <small class="expl">Lowest Shock Index cards (favorites mostly held).</small>
+        </div>
+      </div>
+    </div>
+    <script src="./event_insights.js"></script>
+  </body>
+  </html>

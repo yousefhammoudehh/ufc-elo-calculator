@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Division Insights</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+      :root { --bg: #0b0e13; --card: #141a22; --text: #e5eef8; --muted: #9fb3c8; --accent: #3ba3ff; }
+      body { margin: 0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); }
+      .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+      .card { background: var(--card); border: 1px solid #1f2937; border-radius: 12px; padding: 16px; box-shadow: 0 1px 12px rgba(0,0,0,0.2); }
+      .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+      .title { font-size:18px; font-weight:600; margin:0 0 8px; }
+      select, input { background:#0d1218; color:var(--text); border:1px solid #1f2937; border-radius:8px; padding:8px 10px; }
+      button { background:#3b82f6; color:white; border:0; border-radius:8px; padding:8px 12px; font-weight:600; }
+      small.expl { display:block; color:var(--muted); margin-top:6px; }
+      table { width:100%; border-collapse: collapse; }
+      th, td { padding:8px; border-bottom:1px solid #1f2937; text-align:left; }
+      th { color:var(--muted); }
+    </style>
+    <script src="./nav.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  </head>
+  <body>
+    <div id="topNavHost"></div>
+    <div class="container">
+      <div class="card" style="margin-bottom:16px;">
+        <div class="title">Division Insights</div>
+        <div class="row">
+          <select id="divSelect"></select>
+          <input id="yearInput" type="number" placeholder="Year (optional)" min="1900" />
+          <label>Range
+            <input id="yearFrom" type="number" placeholder="From" min="1900" style="width:100px;" />
+            <input id="yearTo" type="number" placeholder="To" min="1900" style="width:100px;" />
+          </label>
+          <button id="loadDivBtn">Load</button>
+        </div>
+        <small class="expl">Parity measures competitive balance using Gini over ELO distribution. Churn measures average |ΔELO| and top‑10 turnover across a year.</small>
+      </div>
+
+      <div class="card">
+        <div class="title">Parity</div>
+        <div id="parityBlock"></div>
+        <canvas id="parityChart" height="120" style="margin-top:8px;"></canvas>
+        <small class="expl">Gini close to 0 indicates high parity (even ELO spread). Higher values suggest concentration at the top.</small>
+      </div>
+
+      <div class="card" style="margin-top:16px;">
+        <div class="title">Churn (year)</div>
+        <div id="churnBlock"></div>
+        <canvas id="churnChart" height="120" style="margin-top:8px;"></canvas>
+        <small class="expl">Average absolute ELO movement per bout and change in the division’s top‑10 between Jan and Dec.</small>
+      </div>
+
+      <div class="card" style="margin-top:16px;">
+        <div class="title">Analyst takeaways</div>
+        <div id="descriptorBlock" style="line-height:1.6;">
+          <small class="expl">Load a division and year to see plain‑English context based on parity (Gini) and churn.</small>
+        </div>
+      </div>
+    </div>
+    <script src="./division_insights.js"></script>
+  </body>
+  </html>

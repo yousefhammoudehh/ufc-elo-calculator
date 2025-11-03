@@ -75,6 +75,7 @@ class ScrapedFightFighter:
     total_strikes_thrown: int | None = None
     td: int | None = None
     td_attempts: int | None = None
+    td_percent: float | None = None
     sub_attempts: int | None = None
     rev: int | None = None
     ctrl: int | None = None  # seconds
@@ -103,3 +104,4 @@ class ScrapedFight:
     fighter1: ScrapedFightFighter
     fighter2: ScrapedFightFighter
     is_title_fight: bool
+    weight_class_code: int | None = None

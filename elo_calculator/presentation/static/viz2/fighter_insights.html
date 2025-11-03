@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fighter Insights</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+      :root { --bg: #0b0e13; --card: #141a22; --text: #e5eef8; --muted: #9fb3c8; --accent: #3ba3ff; }
+      body { margin: 0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); }
+      .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+      .card { background: var(--card); border: 1px solid #1f2937; border-radius: 12px; padding: 16px; box-shadow: 0 1px 12px rgba(0,0,0,0.2); }
+      .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+      .title { font-size: 18px; font-weight: 600; margin: 0 0 8px; }
+      input, select { background:#0d1218; color:var(--text); border:1px solid #1f2937; border-radius:8px; padding:8px 10px; }
+      button { background:#3b82f6; color:white; border:0; border-radius:8px; padding:8px 12px; font-weight:600; }
+      small.expl { display:block; color:var(--muted); margin-top:6px; }
+      .grid.two { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+      @media (max-width: 900px) { .grid.two { grid-template-columns:1fr; } }
+      table { width:100%; border-collapse: collapse; }
+      th, td { padding:8px; border-bottom:1px solid #1f2937; text-align:left; }
+      th { color:var(--muted); }
+      /* Floating autocomplete */
+      .ac-list { position:fixed; z-index:1000; left:0; top:0; width:0; background:#0d1218; border:1px solid #1f2937; border-top:none; max-height:240px; overflow:auto; border-radius:0 0 8px 8px; display:none; }
+      .ac-item { padding:8px 10px; cursor:pointer; color:var(--text); }
+      .ac-item:hover { background:#111827; }
+    </style>
+    <script src="./nav.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  </head>
+  <body>
+    <div id="topNavHost"></div>
+    <div class="container">
+      <div class="card" style="margin-bottom:16px;">
+        <div class="title">Fighter Insights</div>
+        <div class="row" style="flex-wrap:wrap; gap:12px;">
+          <input id="fighterInput" type="text" placeholder="Fighter name or ID" />
+          <button id="loadBtn">Load</button>
+          <label class="muted">FI window
+            <select id="fiWindow"><option value="fights" selected>Last N fights</option><option value="days">Last N days</option></select>
+            <input id="fiN" type="number" value="7300" min="1" max="7300" style="width:90px;" />
+            <label class="muted">Half‑life (days)</label><input id="fiHL" type="number" value="2000" min="1" max="2000" style="width:100px;" />
+          </label>
+          <label class="muted">Rates
+            <select id="rateMode"><option value="per_min">Per minute</option><option value="per_15">Per 15</option></select>
+          </label>
+        </div>
+        <small class="expl">
+          Type a fighter name or ID and press Load. The dropdown suggests top matches as you type.
+          • FI window: fights = last N fights; days = last N days.
+          • Half‑life: recency decay in days (higher = longer memory).
+          • Rates: display per-minute or per‑15 equivalents.
+        </small>
+      </div>
+
+      <div class="grid two">
+        <div class="card">
+          <div class="title">Form Index</div>
+          <div id="fiBlock"></div>
+          <canvas id="fiSpark" height="60"></canvas>
+          <small class="expl">Form Index measures recent over/under‑performance vs ELO expectation, decayed by recency.</small>
+        </div>
+        <div class="card">
+          <div class="title">Momentum Slope</div>
+          <div id="momBlock"></div>
+          <canvas id="momSpark" height="60"></canvas>
+          <small class="expl">Momentum is the trend of ELO over the last K fights; positive slope indicates upward trajectory.</small>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px;">
+        <div class="title">Pace & Efficiency (per minute)</div>
+        <table id="ratesTbl"></table>
+        <small class="expl">Rates normalize output per minute fought to fairly compare pace and efficiency across different fight lengths.</small>
+      </div>
+
+      <div class="grid two" style="margin-top:16px;">
+        <div class="card">
+          <div class="title">Strength of Schedule (recent)</div>
+          <div id="sosBlock"></div>
+          <small class="expl">Recent opponent ELO (mean/median and interquartile range) provides context for streaks.</small>
+        </div>
+        <div class="card">
+          <div class="title">Style Profile</div>
+          <div id="styleBlock"></div>
+          <small class="expl">Control share and phase mix (distance/clinch/ground) summarize style tendencies.</small>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px;">
+        <div class="title">Quality Wins</div>
+        <div class="row" style="margin-bottom:8px;">
+          <label for="qwThresh">Opponent ELO threshold</label>
+          <input id="qwThresh" type="number" value="1600" step="10" />
+          <button id="qwBtn">Apply</button>
+        </div>
+        <div id="qwBlock"></div>
+        <small class="expl">Quality wins are victories over opponents at or above the chosen ELO threshold at fight time.</small>
+      </div>
+
+      <div class="grid two" style="margin-top:16px;">
+        <div class="card">
+          <div class="title">Opponent‑adjusted Plus/Minus</div>
+          <div id="pmBlock"></div>
+          <small class="expl">Own per‑minute metric minus the opponent’s typical allowed rate (windowed). Higher is better.</small>
+        </div>
+        <div class="card">
+          <div class="title">Consistency & Versatility</div>
+          <div id="cvBlock"></div>
+          <small class="expl">Consistency via SD/CV of recent outputs; Versatility via entropy of win methods (0–1).</small>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px;">
+        <div class="title">Finishing Hazard & Durability</div>
+        <canvas id="hazardChart" height="120"></canvas>
+        <div id="hazardMeta" class="muted" style="margin-top:6px;"></div>
+        <small class="expl">Empirical finish timing density (KO/Sub buckets) and durability (1 − finishes per 15 minutes).</small>
+      </div>
+    </div>
+    <script src="./fighter_insights.js"></script>
+  </body>
+  </html>
