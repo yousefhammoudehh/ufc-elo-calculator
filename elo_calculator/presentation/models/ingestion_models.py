@@ -31,3 +31,17 @@ class EventsIngestionResponse(DataModel):
     events_seeded_count: int
     fighters_seeded: list[FighterResponse]
     fighters_seeded_count: int
+
+
+class FighterLinksRequest(DataModel):
+    fighter_links: list[str]
+
+
+class FightersIngestionResponse(DataModel):
+    fighters_seeded: list[FighterResponse]
+    fighters_seeded_count: int
+
+
+class FighterLinkRequest(DataModel):
+    tapology_link: str
+    stats_link: str | None = None

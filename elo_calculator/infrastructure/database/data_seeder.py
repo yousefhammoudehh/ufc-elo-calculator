@@ -3,7 +3,7 @@ import os
 from datetime import date
 from typing import Any, cast
 
-from sqlalchemy import insert, select
+from sqlalchemy import insert, select, update
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from elo_calculator.configs.log import get_logger
@@ -91,17 +91,24 @@ def _load_events_csv() -> list[dict[str, Any]]:
     return norm
 
 
+CLAMP_MIN_STRENGTH = 0.66
+CLAMP_MAX_STRENGTH = 0.74
+
+
+def _clamp_strength(val: float | None) -> float | None:
+    # Deprecated: no clamping, strengths are written as exact floats from CSV
+    return val
+
+
 def _load_promotions_csv() -> list[dict[str, Any]]:
     rows = _read_csv(os.path.join(_seeder_data_dir(), 'promotions.csv'))
     norm: list[dict[str, Any]] = []
     for r in rows:
         try:
-            # CSV headers: promotions,links,strength
-            # Note: CSV header 'promotions' maps to DB column 'name'; other headers: links,strength
             strength_val = r.get('strength')
-            norm.append(
-                {'name': r['promotions'], 'link': r['links'], 'strength': float(strength_val) if strength_val else None}
-            )
+            # If strength is missing or blank, treat as unknown and set to 0.66
+            strength_float = float(strength_val) if strength_val else 0.66
+            norm.append({'name': r['promotions'], 'link': r['links'], 'strength': strength_float})
         except Exception as e:
             logger.warning('Failed to parse promotions.csv row: %s. Error: %s', r, e, exc_info=True)
             continue
@@ -119,13 +126,52 @@ async def seed_events(con: AsyncConnection) -> None:
 
 
 async def seed_promotions(con: AsyncConnection) -> None:
-    # Use name to deduplicate (links may not be unique across time)
-    result = await con.execute(select(promotions.c.name))
-    existing_names = {row.name for row in result.fetchall()}
+    """Seed promotions and reconcile strengths with CSV.
 
-    payload = [row for row in _load_promotions_csv() if row['name'] not in existing_names]
-    if payload:
-        await con.execute(insert(promotions).values(payload))
+    Behavior:
+    - Insert any promotion present in CSV but missing in DB (by name).
+    - If a promotion exists in DB but its strength differs from CSV, update DB to match CSV.
+    """
+    # Pull existing promotions keyed by name
+    result = await con.execute(select(promotions.c.name, promotions.c.link, promotions.c.strength))
+    rows = result.fetchall()
+    existing_by_name: dict[str, dict[str, Any]] = {
+        cast(str, r.name): {'link': r.link, 'strength': r.strength} for r in rows
+    }
+
+    csv_rows = _load_promotions_csv()
+    # 1) Inserts for new promotions
+    inserts = [row for row in csv_rows if row['name'] not in existing_by_name]
+    if inserts:
+        await con.execute(insert(promotions).values(inserts))
+
+    # 2) Updates for strength deltas (compare exact floats now that DB is Float)
+    def _differs(db_val: Any, csv_val: Any) -> bool:
+        # Treat None distinctly
+        if db_val is None and csv_val is None:
+            return False
+        if db_val is None or csv_val is None:
+            return True
+        try:
+            return float(db_val) != float(csv_val)
+        except Exception:
+            return True
+
+    updates_count = 0
+    for row in csv_rows:
+        name = row['name']
+        csv_strength = row.get('strength')
+        existing = existing_by_name.get(name)
+        if not existing:
+            continue  # handled in inserts
+        if _differs(existing.get('strength'), csv_strength):
+            # Update only strength to honor user's request
+            stmt = update(promotions).where(promotions.c.name == name).values(strength=csv_strength)
+            await con.execute(stmt)
+            updates_count += 1
+
+    if updates_count:
+        logger.info('Updated %d promotion strengths from CSV reconciliation', updates_count)
 
 
 async def seed_data() -> None:

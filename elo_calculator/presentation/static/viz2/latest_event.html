@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Latest Event — ELO Changes</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+      :root { --bg: #0b0e13; --card: #141a22; --text: #e5eef8; --muted: #9fb3c8; --accent: #3ba3ff; }
+      body { margin: 0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); }
+      .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+      .card { background: var(--card); border: 1px solid #1f2937; border-radius: 12px; padding: 16px; box-shadow: 0 1px 12px rgba(0,0,0,0.2); position:relative; }
+      h1 { font-size: 18px; margin: 0 0 12px; }
+      table { width:100%; border-collapse: collapse; }
+      th, td { padding: 8px; border-bottom: 1px solid #1f2937; text-align:left; }
+      th { color: var(--muted); font-weight: 600; font-size: 13px; }
+      .delta.pos { color: #34d399; font-weight:600; }
+      .delta.neg { color: #f87171; font-weight:600; }
+      .badge { display:inline-block; padding: 2px 8px; border-radius: 999px; background:#1f2937; font-size:12px; color: var(--text); }
+      .badge.title { background: rgba(255,215,0,0.15); color: #ffd700; border: 1px solid rgba(255,215,0,0.35); }
+      .loader-overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background: rgba(11,14,19,0.6); backdrop-filter: blur(3px); z-index:5; }
+      .loader { display:inline-flex; align-items:center; gap:10px; color: var(--muted); font-weight:600; }
+      .spinner { width:18px; height:18px; border:3px solid #1f2937; border-top-color: var(--accent); border-radius:50%; animation: spin .9s linear infinite; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      a.link-muted, a.link-muted:visited, a.link-muted:active { color: var(--text); text-decoration: none; border-bottom:1px dashed transparent; }
+      a.link-muted:hover { color: var(--accent); border-bottom-color: var(--accent); }
+    </style>
+  </head>
+  <body>
+    <div id="topNavHost"></div>
+    <div class="container">
+      <div class="card">
+        <h1>Latest Event — ELO Changes</h1>
+        <div id="eventMeta" style="color:var(--muted); margin-bottom:8px;"></div>
+        <table>
+          <thead>
+            <tr><th>Bout</th><th>Outcomes</th><th>Δ ELO (F1 / F2)</th><th>Open</th></tr>
+          </thead>
+          <tbody id="tbl"></tbody>
+        </table>
+        <small style="color:var(--muted); display:block; margin-top:6px;">Event overview of ELO swings per bout. Title bouts are highlighted; open a bout for a detailed breakdown.</small>
+        <div class="loader-overlay" id="loader"><div class="loader"><span class="spinner"></span><span>Loading…</span></div></div>
+      </div>
+    </div>
+    <script src="./app.js"></script>
+    <script src="./app.js"></script>
+    <script src="./nav.js"></script>
+    <script src="./latest_event.js"></script>
+  </body>
+  </html>

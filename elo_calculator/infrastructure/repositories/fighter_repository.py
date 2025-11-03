@@ -43,6 +43,23 @@ class FighterRepository(BaseRepository[Fighter]):
         all_fighters = await self.get_all(sort_by='current_elo', order='desc')
         return all_fighters[:limit]
 
+    async def search_by_name(self, q: str, limit: int = 20) -> list[Fighter]:
+        """Search fighters by name substring (case-insensitive)."""
+        results = await self.get_all(filters={'name:ilike': f'%{q}%'}, sort_by='name', order='asc')
+        return results[:limit]
+
+    async def get_top_fighters_by_peak_elo(self, limit: int = 10) -> list[Fighter]:
+        """Get the top fighters by peak ELO rating."""
+        all_fighters = await self.get_all(sort_by='peak_elo', order='desc')
+        return all_fighters[:limit]
+
+    async def search_by_name_paginated(
+        self, q: str, page: int, limit: int, sort_by: str = 'name', order: str = 'asc'
+    ) -> tuple[list[Fighter], int]:
+        filters = {'name:ilike': f'%{q}%'} if q else None
+        rows, total = await self.get_paginated_with_filters(page, limit, filters, sort_by, order)
+        return rows, total
+
     async def get_fighters_by_elo_range(self, min_elo: float, max_elo: float) -> list[Fighter]:
         """Get fighters within an ELO range."""
         return await self.get_all(filters={'current_elo:>=': min_elo, 'current_elo:<=': max_elo})

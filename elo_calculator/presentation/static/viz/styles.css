@@ -1,0 +1,49 @@
+/* Utility glue for our cards & inline bars */
+.card {
+  background-color: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 1rem;
+  padding: 1rem;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+.card-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+.nav-link {
+  color: #475569;
+}
+.nav-link:hover {
+  color: #0f172a;
+}
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 9999px;
+  background-color: #f1f5f9;
+  color: #334155;
+}
+
+/***** Inline bar (for ELO) *****/
+.inline-bar {
+  position: relative;
+  height: 8px;
+  border-radius: 9999px;
+  background: rgb(226 232 240);
+}
+.inline-bar > i {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: rgb(14 165 233); /* sky-500 */
+}
+
+/***** Shimmer keyframes used by skeletons *****/
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}

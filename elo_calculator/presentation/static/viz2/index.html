@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>UFC ELO Visualizations</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+      <style>
+      :root { --bg: #0b0e13; --card: #141a22; --text: #e5eef8; --muted: #9fb3c8; --accent: #3ba3ff; }
+      body { margin: 0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); }
+      header { padding: 20px 24px; border-bottom: 1px solid #1f2937; }
+      .container { max-width: 1320px; margin: 0 auto; padding: 24px; box-sizing: border-box; overflow-x: hidden; }
+      .grid { display: grid; grid-template-columns: 1fr; gap: 24px; }
+      @media(min-width: 960px) { .grid { grid-template-columns: 1fr 1fr; } }
+      .card { background: var(--card); border: 1px solid #1f2937; border-radius: 12px; padding: 16px; box-shadow: 0 1px 12px rgba(0,0,0,0.2); overflow: hidden; }
+      .row { display: flex; gap: 12px; align-items: center; }
+      .row > * { flex: none; }
+      input[type="text"] { background: #0d1218; color: var(--text); border: 1px solid #1f2937; border-radius: 8px; padding: 10px 12px; width: 280px; }
+      button { background: var(--accent); color: white; border: 0; border-radius: 8px; padding: 10px 14px; font-weight: 600; cursor: pointer; }
+      button:disabled { opacity: 0.6; cursor: default; }
+      small { color: var(--muted); }
+      h2 { margin: 8px 0 16px; font-size: 16px; font-weight: 600; color: var(--muted); }
+      .title { font-size: 18px; font-weight: 600; margin: 0; }
+      /* Leaderboard styling */
+      table.leaderboard { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      table.leaderboard td, table.leaderboard th { word-break: break-word; }
+      table.leaderboard th, table.leaderboard td { padding: 8px; border-bottom: 1px solid #1f2937; text-align: left; }
+      table.leaderboard thead th { color: var(--muted); font-weight: 600; font-size: 13px; }
+      /* Rankings numeric alignment */
+      #tblRankingsYear thead th:nth-child(4), #tblRankingsYear tbody td:nth-child(4) { text-align: right; font-variant-numeric: tabular-nums; }
+      /* Podium row theming */
+      tr.podium-gold { background: rgba(255, 215, 0, 0.08); }
+      tr.podium-silver { background: rgba(192, 192, 192, 0.08); }
+      tr.podium-bronze { background: rgba(205, 127, 50, 0.08); }
+      tr.podium-gold td, tr.podium-silver td, tr.podium-bronze td { border-bottom-color: #263241; }
+      #tblHighGains td:nth-child(3), #tblHighGains th:nth-child(3),
+      #tblLowGains td:nth-child(3), #tblLowGains th:nth-child(3),
+      #tblHighLosses td:nth-child(3), #tblHighLosses th:nth-child(3) { text-align: right; font-variant-numeric: tabular-nums; }
+  a.link-muted,
+  a.link-muted:visited,
+  a.link-muted:active { color: var(--text); text-decoration: none; border-bottom: 1px dashed transparent; }
+  a.link-muted:hover { color: var(--accent); border-bottom-color: var(--accent); text-decoration: none; }
+      .badge { display:inline-block; padding: 2px 8px; border-radius: 999px; background:#1f2937; font-size:12px; color: var(--text); }
+      .badge.win { background: rgba(34,197,94,0.2); color: #34d399; border: 1px solid rgba(34,197,94,0.35); }
+      .badge.loss { background: rgba(239,68,68,0.18); color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
+      .badge.draw { background: rgba(148,163,184,0.18); color: #9fb3c8; border: 1px solid rgba(148,163,184,0.3); }
+      .delta.pos { color: #34d399; font-weight: 600; }
+      .delta.neg { color: #f87171; font-weight: 600; }
+      .cell-actions { color: var(--muted); font-size: 12px; }
+      .cell-actions a { color: var(--accent); text-decoration: none; }
+      /* Loaders */
+      .card { position: relative; }
+      .loader-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(11,14,19,0.6); backdrop-filter: blur(3px); z-index: 5; }
+      .kpi-chip { background: #10151d; border: 1px solid #1f2937; border-radius: 10px; padding: 12px 16px; min-width: 160px; display: flex; flex-direction: column; gap: 4px; }
+      .kpi-chip-title { color: var(--muted); font-size: 12px; letter-spacing: 0.02em; text-transform: uppercase; }
+      .kpi-chip-value { font-size: 18px; font-weight: 700; color: var(--text); }
+      .loader { display: inline-flex; align-items: center; gap: 10px; color: var(--muted); font-weight: 600; }
+      .spinner { width: 18px; height: 18px; border: 3px solid #1f2937; border-top-color: var(--accent); border-radius: 50%; animation: spin 0.9s linear infinite; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+  </head>
+  <body>
+    <div id="topNavHost"></div>
+    <div class="container">
+      <!-- Header controls -->
+      <div class="card" id="hdrControls">
+        <div class="row" style="flex-wrap:wrap; gap:12px;">
+          <label style="color:var(--muted);">Division
+            <select id="fltDivision" style="background:#0d1218;color:var(--text);border:1px solid #1f2937;border-radius:8px;padding:6px 8px;">
+              <option value="all">All</option>
+              <option value="101">Men's Flyweight (125)</option>
+              <option value="102">Men's Bantamweight (135)</option>
+              <option value="103">Men's Featherweight (145)</option>
+              <option value="104">Men's Lightweight (155)</option>
+              <option value="105">Men's Welterweight (170)</option>
+              <option value="106">Men's Middleweight (185)</option>
+              <option value="107">Men's Light Heavyweight (205)</option>
+              <option value="108">Men's Heavyweight (265)</option>
+              <option value="201">Women's Strawweight (115)</option>
+              <option value="202">Women's Flyweight (125)</option>
+              <option value="203">Women's Bantamweight (135)</option>
+              <option value="204">Women's Featherweight (145)</option>
+            </select>
+          </label>
+          <label style="color:var(--muted);">Timeframe
+            <select id="fltWindow" style="background:#0d1218;color:var(--text);border:1px solid #1f2937;border-radius:8px;padding:6px 8px;">
+              <option value="30">Last 30d</option>
+              <option value="90" selected>Last 90d</option>
+              <option value="365">Last 365d</option>
+              <option value="0">All</option>
+            </select>
+          </label>
+          <label style="color:var(--muted);">Snapshot year
+            <input id="fltYear" type="number" style="width:110px;background:#0d1218;color:var(--text);border:1px solid #1f2937;border-radius:8px;padding:6px 8px;" />
+          </label>
+          <span style="flex:1"></span>
+          <input id="qHeader" type="text" placeholder="Quick search fighter/event" />
+          <button id="viewBtn" style="background:#374151">Go</button>
+        </div>
+      </div>
+
+      <!-- KPI strip -->
+      <div class="card" id="kpiStrip">
+        <div id="kpiRow" class="row" style="flex-wrap:wrap; gap:12px;"></div>
+      </div>
+
+      <!-- Grid: two columns on desktop -->
+      <div class="grid two" style="gap:24px; margin-top:24px;">
+        <!-- Left: Rankings Snapshot and Latest Event -->
+        <div class="card">
+          <h2>Rankings snapshot (Top 10)</h2>
+          <table id="tblRankPreview" class="leaderboard">
+            <thead><tr><th>#</th><th>Fighter</th><th>ELO</th><th>Δ YoY</th><th>Division</th></tr></thead>
+            <tbody></tbody>
+          </table>
+          <div class="row" style="justify-content:flex-end; margin-top:8px;">
+            <a href="/viz/rankings.html" class="link" style="text-decoration:none;"><button style="background:#374151">View more</button></a>
+          </div>
+        </div>
+        <div class="card">
+          <h2>Latest event — ELO swings</h2>
+          <div id="latestEventHeader" style="color:var(--muted); margin-bottom:8px;"></div>
+          <div id="latestEventChips" class="row" style="gap:8px; margin-bottom:8px;"></div>
+          <table id="tblLatestEventHome" class="leaderboard">
+            <thead><tr><th>Bout</th><th>Method</th><th>Δ Winner</th><th>Δ Loser</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Right: Movers, Division Overview, Event Highlights, Quick H2H -->
+      <div class="grid two" style="gap:24px;">
+        <div class="card" style="display:flex; flex-direction:column;">
+          <div class="row" style="justify-content:space-between; align-items:center;">
+            <h2 style="margin-bottom:0;">Top movers</h2>
+            <div class="row" style="gap:8px;">
+              <button id="tabGains" style="background:#374151">Gains</button>
+              <button id="tabLosses" style="background:#374151">Losses</button>
+            </div>
+          </div>
+          <div style="margin-top:8px; max-height:200px; overflow:auto;">
+            <table id="tblGains" class="leaderboard" style="display:table;">
+              <thead><tr><th>Fighter</th><th>Δ ELO</th><th>Fights</th><th>Last fight</th></tr></thead>
+              <tbody></tbody>
+            </table>
+            <table id="tblLosses" class="leaderboard" style="display:none;">
+              <thead><tr><th>Fighter</th><th>Δ ELO</th><th>Fights</th><th>Last fight</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <h2>Most in-form</h2>
+          <p style="color:var(--muted); margin-bottom:8px;">Top form index over last 5 fights (min 2 bouts in past 2 years).</p>
+          <table id="tblForm" class="leaderboard">
+            <thead><tr><th>Fighter</th><th>Form</th><th>Recent fights</th><th>Last fight</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="card">
+          <h2>Division overview</h2>
+          <div id="divGrid" class="grid" style="grid-template-columns: repeat(2, 1fr);"></div>
+        </div>
+        <div class="card">
+          <h2>Event highlights</h2>
+          <div class="grid" style="grid-template-columns: 1fr 1fr; gap:12px;">
+            <div>
+              <h3 class="title" style="margin-bottom:8px;">Most shocking</h3>
+              <table id="tblShock" class="leaderboard"><thead><tr><th>Event</th><th>Shock</th></tr></thead><tbody></tbody></table>
+            </div>
+            <div>
+              <h3 class="title" style="margin-bottom:8px;">Most predictable</h3>
+              <table id="tblChalk" class="leaderboard"><thead><tr><th>Event</th><th>Index</th></tr></thead><tbody></tbody></table>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <h2>Quick H2H</h2>
+          <div class="row" style="flex-wrap:wrap; gap:8px; margin-bottom:8px;">
+            <input id="qhA" type="text" placeholder="Fighter A" />
+            <input id="qhB" type="text" placeholder="Fighter B" />
+            <button id="qhGo">Calculate</button>
+            <a href="/viz/h2h.html" class="link" style="text-decoration:none; margin-left:auto;"><button style="background:#374151">Open full H2H</button></a>
+          </div>
+          <div id="qhOut" style="color:var(--muted);"></div>
+        </div>
+      </div>
+    </div>
+    <script src="./app.js"></script>
+    <script src="./nav.js"></script>
+  </body>
+</html>

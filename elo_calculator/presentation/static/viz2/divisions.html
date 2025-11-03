@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>By Division — UFC ELO</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+      :root { --bg: #0b0e13; --card: #141a22; --text: #e5eef8; --muted: #9fb3c8; --accent: #3ba3ff; }
+      body { margin: 0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); }
+      .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+      .card { background: var(--card); border: 1px solid #1f2937; border-radius: 12px; padding: 16px; box-shadow: 0 1px 12px rgba(0,0,0,0.2); }
+      .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+      select, input[type="checkbox"] { background:#0d1218; color:var(--text); border:1px solid #1f2937; border-radius:8px; padding:8px 10px; }
+      button { background: var(--accent); color:#fff; border:0; border-radius:8px; padding:8px 12px; font-weight:600; }
+      table { width:100%; border-collapse: collapse; }
+      th, td { padding:8px; border-bottom:1px solid #1f2937; text-align:left; }
+      th { color: var(--muted); font-weight:600; font-size:13px; }
+      td.val, th.val { text-align:right; font-variant-numeric: tabular-nums; }
+      a.link-muted, a.link-muted:visited, a.link-muted:active { color: var(--text); text-decoration: none; border-bottom:1px dashed transparent; }
+      a.link-muted:hover { color: var(--accent); border-bottom-color: var(--accent); }
+    </style>
+  </head>
+  <body>
+    <div id="topNavHost"></div>
+    <div class="container">
+      <div class="card" style="margin-bottom:16px;">
+        <div class="row">
+          <label>Division <select id="divisionSel"></select></label>
+          <label>Metric
+            <select id="metricSel">
+              <option value="current">Current ELO</option>
+              <option value="peak">Peak ELO</option>
+              <option value="gains">ELO Gains</option>
+            </select>
+          </label>
+          <label>Year <select id="yearSel"></select></label>
+          <label class="row" style="gap:6px;">
+            <input type="checkbox" id="activeOnly" /> Active (≥1 in 18m or ≥2 in 24m)
+          </label>
+          <button id="applyBtn">Apply</button>
+        </div>
+      </div>
+      <div class="card">
+        <table>
+          <thead><tr><th>#</th><th>Fighter</th><th class="val" id="valHead">Value</th></tr></thead>
+          <tbody id="tblBody"></tbody>
+        </table>
+        <small style="color:var(--muted); display:block; margin-top:6px;">This table ranks fighters within the selected division by the chosen metric. “Active” applies global activity rules (18/24/36 months).</small>
+      </div>
+    </div>
+    <script src="./app.js"></script>
+    <script src="./nav.js"></script>
+    <script src="./divisions.js"></script>
+  </body>
+  </html>

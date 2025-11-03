@@ -1,0 +1,32 @@
+<header>
+  <style>
+    .nav { display:flex; gap:14px; align-items:center; flex-wrap:wrap; padding:12px 0; }
+    .nav a { color: var(--text); text-decoration:none; }
+    .nav .brand { font-weight:700; margin-right:8px; }
+    .nav .links a { color: var(--muted); padding: 4px 6px; border-radius:6px; }
+    .nav .links a:hover { color: var(--text); background:#111827; }
+    .nav .spacer { flex:1; }
+    .nav input[type="text"] { background:#0d1218; color:var(--text); border:1px solid #1f2937; border-radius:8px; padding:8px 10px; min-width:260px; }
+    .btn-muted { background:#374151; color:#e5eef8; border:0; border-radius:8px; padding:8px 12px; font-weight:600; }
+  </style>
+  <div class="container">
+    <div class="nav">
+      <a class="brand" href="/viz/index.html">UFC ELO</a>
+      <span class="links">
+        <a href="/viz/rankings.html">Rankings</a>
+        <a href="/viz/elo_stats.html">ELO Stats</a>
+        <a href="/viz/divisions.html">By Division</a>
+        <a href="/viz/division_insights.html">Division Insights</a>
+        <a href="/viz/top_stats.html">Top Stats</a>
+        <a href="/viz/event_insights.html">Event Insights</a>
+        <a href="/viz/h2h.html">H2H</a>
+        <a href="/viz/fighters.html">Fighters</a>
+        <a href="/viz/fighter_insights.html">Fighter Insights</a>
+      </span>
+      <span class="spacer"></span>
+      <input id="qHeader" type="text" placeholder="Search fighter by name or ID" />
+      <button id="viewBtn" class="btn-primary">View</button>
+      <a href="/viz/fighters.html" style="text-decoration:none; margin-left:6px;"><button class="btn-muted">Browse</button></a>
+    </div>
+  </div>
+</header>

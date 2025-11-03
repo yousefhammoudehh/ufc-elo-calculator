@@ -12,7 +12,7 @@ promotions = Table(
     Column('promotion_id', UUID(as_uuid=False), primary_key=True, server_default=text('gen_random_uuid()')),
     Column('name', String, nullable=False),
     Column('link', Text),
-    Column('strength', Numeric(5, 2)),
+    Column('strength', Float),
 )
 
 # 2. Fighters
@@ -38,6 +38,7 @@ events = Table(
     Column('fighters_seeded', Boolean, server_default=text('false')),
     Column('fights_seeded', Boolean, server_default=text('false')),
     Column('event_stats_link', Text),
+    Column('name', String),
 )
 
 # 4. Bouts
@@ -47,6 +48,7 @@ bouts = Table(
     Column('bout_id', String(16), primary_key=True),
     Column('event_id', UUID(as_uuid=False), ForeignKey('events.event_id')),
     Column('is_title_fight', Boolean),
+    Column('weight_class_code', Integer),
     Column('method', String),
     Column('round_num', Integer),
     Column('time_sec', Integer),

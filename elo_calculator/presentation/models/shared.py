@@ -1,19 +1,22 @@
-from typing import Any
+from collections.abc import Sequence
+from typing import Any, TypeVar
 
 from pydantic import BaseModel
 
 from elo_calculator.domain.entities.base_entity import BaseEntityBase
 
+R = TypeVar('R', bound='DataModel')
+E = TypeVar('E', bound=BaseEntityBase)
+T = TypeVar('T')
+
 
 class DataModel(BaseModel):
     @classmethod
-    def from_entity[R: DataModel, E: BaseEntityBase](cls: type[R], entity: E, exclude: list[str] | None = None) -> R:
-        return cls(**entity.to_dict(exclude))
+    def from_entity(cls: type[R], entity: E, exclude: Sequence[str] | None = None) -> R:
+        return cls(**entity.to_dict(list(exclude) if exclude is not None else None))
 
     @classmethod
-    def from_entity_list[R: DataModel, E: BaseEntityBase](
-        cls: type[R], entities: list[E], exclude: list[str] | None = None
-    ) -> list[R]:
+    def from_entity_list(cls: type[R], entities: Sequence[E], exclude: Sequence[str] | None = None) -> list[R]:
         return [cls.from_entity(entity, exclude) for entity in entities]
 
 

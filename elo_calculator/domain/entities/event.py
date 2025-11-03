@@ -15,3 +15,4 @@ class Event(BaseEntityBase):
     fighters_seeded: bool | None = False
     fights_seeded: bool | None = False
     event_stats_link: str | None = None
+    name: str | None = None

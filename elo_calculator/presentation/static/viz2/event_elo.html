@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Event ELO — UFC ELO</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+      :root { --bg: #0b0e13; --card: #141a22; --text: #e5eef8; --muted: #9fb3c8; --accent: #3ba3ff; }
+      body { margin: 0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); }
+      .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+      .card { background: var(--card); border: 1px solid #1f2937; border-radius: 12px; padding: 16px; box-shadow: 0 1px 12px rgba(0,0,0,0.2); position:relative; }
+      h1 { font-size: 18px; margin: 0 0 12px; }
+      table { width:100%; border-collapse: collapse; }
+      th, td { padding: 8px; border-bottom: 1px solid #1f2937; text-align:left; }
+      th { color: var(--muted); font-weight: 600; font-size: 13px; }
+      .delta.pos { color: #34d399; font-weight:600; }
+      .delta.neg { color: #f87171; font-weight:600; }
+      button { background: var(--accent); color: white; border: 0; border-radius: 8px; padding: 8px 12px; font-weight: 600; cursor: pointer; }
+      .btn-muted { background:#374151; color:#e5eef8; }
+      .loader-overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background: rgba(11,14,19,0.6); backdrop-filter: blur(3px); z-index:5; }
+      .loader { display:inline-flex; align-items:center; gap:10px; color: var(--muted); font-weight:600; }
+      .spinner { width:18px; height:18px; border:3px solid #1f2937; border-top-color: var(--accent); border-radius:50%; animation: spin .9s linear infinite; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      a.link-muted, a.link-muted:visited, a.link-muted:active { color: var(--text); text-decoration: none; border-bottom:1px dashed transparent; }
+      a.link-muted:hover { color: var(--accent); border-bottom-color: var(--accent); }
+    </style>
+  </head>
+  <body>
+    <div id="topNavHost"></div>
+    <div class="container">
+      <div class="card">
+        <h1 style="margin-bottom:8px;">Event ELO — Summary</h1>
+        <div class="row" style="gap:12px; margin-bottom:12px; align-items:center;">
+          <button id="btnPrevEvent" class="btn-muted">‹ Prev</button>
+          <div id="eventLabel" style="color:var(--muted);"></div>
+          <button id="btnNextEvent" class="btn-muted">Next ›</button>
+          <span style="flex:1"></span>
+          <label class="muted">Date</label>
+          <select id="eventDateSelect" style="background:#0d1218;color:#e5eef8;border:1px solid #1f2937;border-radius:8px;padding:8px 10px; min-width:220px;"></select>
+        </div>
+        <table>
+          <thead>
+            <tr><th>Bout</th><th>Outcomes</th><th>Δ ELO (F1 / F2)</th><th>Open</th></tr>
+          </thead>
+          <tbody id="tbl"></tbody>
+        </table>
+        <small style="color:var(--muted); display:block; margin-top:6px;">Select a past event to review per-bout ELO swings. Title bouts sort to the top; hover tooltips show exact values.</small>
+        <div class="loader-overlay" id="loader"><div class="loader"><span class="spinner"></span><span>Loading…</span></div></div>
+      </div>
+    </div>
+    <script src="./app.js"></script>
+    <script src="./nav.js"></script>
+    <script src="./event_elo.js"></script>
+  </body>
+  </html>

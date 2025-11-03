@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bout</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+      :root { --bg: #0b0e13; --card: #141a22; --text: #e5eef8; --muted: #9fb3c8; --accent: #3ba3ff; }
+      body { margin: 0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); }
+      header { padding: 20px 24px; border-bottom: 1px solid #1f2937; }
+      .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+      .card { background: var(--card); border: 1px solid #1f2937; border-radius: 12px; padding: 16px; box-shadow: 0 1px 12px rgba(0,0,0,0.2); }
+      .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+      .title { font-size: 18px; font-weight: 600; margin: 0; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { padding: 8px; border-bottom: 1px solid #1f2937; text-align: left; }
+      th { color: var(--muted); font-weight: 600; }
+      a { color: var(--accent); text-decoration: none; }
+      .badge { display:inline-block; padding: 2px 8px; border-radius: 999px; background:#1f2937; font-size:12px; color: var(--text); }
+      .mono { font-family: ui-monospace, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; white-space: pre-wrap; }
+      .grid.two { display:grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items:start; }
+      @media (max-width: 900px) { .grid.two { grid-template-columns: 1fr; } }
+      .muted { color: var(--muted); }
+      .delta.pos { color:#16a34a; }
+      .delta.neg { color:#b91c1c; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="container">
+        <div class="row">
+          <a href="/viz/index.html" style="margin-right:auto">← Home</a>
+          <div class="title" id="eventMeta"></div>
+        </div>
+      </div>
+    </header>
+    <div class="container">
+      <div class="card" style="margin-bottom:16px;">
+        <div class="row" style="justify-content: space-between;">
+          <div>
+            <div class="title" id="boutMeta"></div>
+            <div id="psExplainer" style="color:var(--muted); margin-top:6px; font-size:14px"></div>
+          </div>
+          <div>
+            <div id="names" style="display:flex; gap:12px; align-items:center;">
+              <span class="badge" id="f1Outcome"></span>
+              <span id="f1Name" class="title"></span>
+              <span style="color:var(--muted)">vs</span>
+              <span id="f2Name" class="title"></span>
+              <span class="badge" id="f2Outcome"></span>
+            </div>
+            <div style="margin-top:6px; color:var(--muted); font-size:14px">
+              <span id="f1Elo"></span>
+              <span style="margin:0 8px">•</span>
+              <span id="f2Elo"></span>
+              <span style="margin:0 8px">•</span>
+              <span id="wcLabel"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:16px;">
+        <div class="title" style="margin-bottom:8px;">Stats comparison</div>
+        <table id="cmpTable"></table>
+        <small class="expl" style="color:var(--muted); display:block; margin-top:6px;">Side-by-side bout stats (knockdowns, significant strikes, control, takedowns, etc.). Leaders per row are highlighted.</small>
+      </div>
+
+      <div class="card">
+        <div class="title" style="margin-bottom:8px;">ELO calculation</div>
+        <div class="grid two">
+          <div id="elo1"></div>
+          <div id="elo2"></div>
+        </div>
+        <small class="expl" style="color:var(--muted); display:block; margin-top:6px;">Each side shows expectation (E), target (Y), K and the before→after ELO change with the core formula R_after = R_before + K*(Y − E).</small>
+      </div>
+      
+      <div class="card" style="margin-top:16px;">
+        <div class="title" style="margin-bottom:8px;">K-factor details</div>
+        <div class="grid two">
+          <div id="k1" class="muted"></div>
+          <div id="k2" class="muted"></div>
+        </div>
+        <small class="expl" style="color:var(--muted); display:block; margin-top:6px;">K is scaled by rounds, method, experience, recency and finish timing, subject to a safety cap; tooltips describe each multiplier.</small>
+      </div>
+    </div>
+    <script src="./bout.js"></script>
+  </body>
+  </html>

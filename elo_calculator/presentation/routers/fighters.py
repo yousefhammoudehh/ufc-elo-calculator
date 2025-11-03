@@ -18,14 +18,7 @@ async def list_fighters(
     return get_ok(FighterResponse.from_entity_list(fighters))
 
 
-@router.get('/{fighter_id}', response_model=MainResponse[FighterResponse])
-async def get_fighter(
-    fighter_id: str, service: FighterService = Depends(get_service(FighterService))
-) -> MainResponse[FighterResponse]:
-    fighter = await service.get_by_fighter_id(fighter_id)
-    if fighter is None:
-        return get_not_found(message=f'Fighter id:{fighter_id} not found')
-    return get_ok(FighterResponse.from_entity(fighter))
+# NOTE: Keep parameterized route at the bottom to avoid shadowing static subpaths like /search or /search-paginated
 
 
 @router.post('/', response_model=MainResponse[FighterResponse])
@@ -56,4 +49,46 @@ async def get_fighter_by_tapology_link(
     fighter = await service.get_by_tapology_link(tapology_link)
     if fighter is None:
         return get_not_found(message=f'Fighter with tapology link not found: {tapology_link}')
+    return get_ok(FighterResponse.from_entity(fighter))
+
+
+@router.get('/search', response_model=MainResponse[list[FighterResponse]])
+async def search_fighters(
+    q: str = Query(..., min_length=1, description='Case-insensitive substring to search in fighter names'),
+    limit: int = Query(20, ge=1, le=100),
+    service: FighterService = Depends(get_service(FighterService)),
+) -> MainResponse[list[FighterResponse]]:
+    results = await service.search_by_name(q=q, limit=limit)
+    return get_ok(FighterResponse.from_entity_list(results))
+
+
+@router.get('/search-paginated')
+async def search_fighters_paginated(
+    q: str = Query('', description='Case-insensitive substring to search in fighter names'),
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    sort_by: str = Query('name', pattern='^(name|current_elo|peak_elo)$'),
+    order: str = Query('asc', pattern='^(asc|desc)$'),
+    service: FighterService = Depends(get_service(FighterService)),
+) -> MainResponse[dict[str, object]]:
+    rows, total = await service.search_by_name_paginated(q=q, page=page, limit=limit, sort_by=sort_by, order=order)
+    return get_ok(
+        {
+            'items': FighterResponse.from_entity_list(rows),
+            'total': total,
+            'page': page,
+            'limit': limit,
+            'sort_by': sort_by,
+            'order': order,
+        }
+    )
+
+
+@router.get('/{fighter_id}', response_model=MainResponse[FighterResponse])
+async def get_fighter(
+    fighter_id: str, service: FighterService = Depends(get_service(FighterService))
+) -> MainResponse[FighterResponse]:
+    fighter = await service.get_by_fighter_id(fighter_id)
+    if fighter is None:
+        return get_not_found(message=f'Fighter id:{fighter_id} not found')
     return get_ok(FighterResponse.from_entity(fighter))
