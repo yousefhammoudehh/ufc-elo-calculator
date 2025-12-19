@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from elo_calculator.application.services.fight_scrape_service import FightEloTrace, FightScrapeResult
+from elo_calculator.application.fight_scrape_service import FightEloTrace, FightScrapeResult
 
 
 class EloTransitionResponse(BaseModel):

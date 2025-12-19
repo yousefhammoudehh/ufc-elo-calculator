@@ -4,7 +4,10 @@ from .app_exceptions import (
     ApplicationException,
     DatabaseException,
     DataNotFoundException,
+    ExternalServiceException,
     FieldException,
+    ForbiddenException,
+    UnauthorizedException,
     ValidationException,
 )
 
@@ -15,6 +18,9 @@ __all__ = [
     'DataNotFoundException',
     'DatabaseException',
     'Errors',
+    'ExternalServiceException',
     'FieldException',
+    'ForbiddenException',
+    'UnauthorizedException',
     'ValidationException',
 ]

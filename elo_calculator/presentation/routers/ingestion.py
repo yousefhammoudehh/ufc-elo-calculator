@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends
 
-from elo_calculator.application.services.event_elo_service import EventEloService
-from elo_calculator.application.services.event_ingestion_service import EventIngestionService
-from elo_calculator.application.services.fight_scrape_service import FightScrapeService
+from elo_calculator.application.event_elo_service import EventEloService
+from elo_calculator.application.event_ingestion_service import EventIngestionService
+from elo_calculator.application.fight_scrape_service import FightScrapeService
 from elo_calculator.presentation.dependencies import get_service
 from elo_calculator.presentation.models.elo_models import EventEloSeedListResponse
 from elo_calculator.presentation.models.event_models import EventResponse
@@ -21,10 +21,10 @@ from elo_calculator.presentation.models.ingestion_models import (
 from elo_calculator.presentation.models.shared import MainResponse
 from elo_calculator.presentation.utils.response import get_bad_request, get_ok
 
-router = APIRouter(prefix='/ingest', tags=['ingestion'])
+ingestion_router = APIRouter(prefix='/ingest', tags=['Ingestion'])
 
 
-@router.post('/events', response_model=MainResponse[EventsIngestionResponse])
+@ingestion_router.post('/events', response_model=MainResponse[EventsIngestionResponse])
 async def ingest_events(
     request: EventIngestionRequest, service: EventIngestionService = Depends(get_service(EventIngestionService))
 ) -> MainResponse[EventsIngestionResponse]:
@@ -40,7 +40,7 @@ async def ingest_events(
     return get_ok(payload)
 
 
-@router.post('/events-elo', response_model=MainResponse[EventEloSeedListResponse])
+@ingestion_router.post('/events-elo', response_model=MainResponse[EventEloSeedListResponse])
 async def seed_events_elo(
     request: EventIngestionRequest, service: EventEloService = Depends(get_service(EventEloService))
 ) -> MainResponse[EventEloSeedListResponse]:
@@ -49,7 +49,7 @@ async def seed_events_elo(
     return get_ok(payload)
 
 
-@router.post('/events-by-link', response_model=MainResponse[EventsIngestionResponse])
+@ingestion_router.post('/events-by-link', response_model=MainResponse[EventsIngestionResponse])
 async def ingest_events_by_link(
     request: EventIngestionLinksRequest, service: EventIngestionService = Depends(get_service(EventIngestionService))
 ) -> MainResponse[EventsIngestionResponse]:
@@ -65,7 +65,7 @@ async def ingest_events_by_link(
     return get_ok(payload)
 
 
-@router.post('/events-fights-elo', response_model=MainResponse[FightScrapeListResponse])
+@ingestion_router.post('/events-fights-elo', response_model=MainResponse[FightScrapeListResponse])
 async def ingest_event_fights_and_elo(
     request: EventIngestionRequest, service: FightScrapeService = Depends(get_service(FightScrapeService))
 ) -> MainResponse[FightScrapeListResponse]:
@@ -82,7 +82,7 @@ async def ingest_event_fights_and_elo(
     return get_ok(payload)
 
 
-@router.post('/fights-first', response_model=MainResponse[FightScrapeListResponse])
+@ingestion_router.post('/fights-first', response_model=MainResponse[FightScrapeListResponse])
 async def ingest_first_unseeded_event_fights(
     request: FirstUnseededEventsRequest, service: FightScrapeService = Depends(get_service(FightScrapeService))
 ) -> MainResponse[FightScrapeListResponse]:
@@ -95,7 +95,7 @@ async def ingest_first_unseeded_event_fights(
         return get_bad_request(message='Failed to seed first unseeded event fights', errors=str(exc))
 
 
-@router.post('/events-first', response_model=MainResponse[FirstUnseededEventsResponse])
+@ingestion_router.post('/events-first', response_model=MainResponse[FirstUnseededEventsResponse])
 async def ingest_first_unseeded_events(
     request: FirstUnseededEventsRequest, service: EventIngestionService = Depends(get_service(EventIngestionService))
 ) -> MainResponse[FirstUnseededEventsResponse]:
@@ -119,7 +119,7 @@ async def ingest_first_unseeded_events(
     return get_ok(payload)
 
 
-@router.post('/fighters-by-link', response_model=MainResponse[FightersIngestionResponse])
+@ingestion_router.post('/fighters-by-link', response_model=MainResponse[FightersIngestionResponse])
 async def ingest_fighters_by_link(
     request: FighterLinksRequest, service: EventIngestionService = Depends(get_service(EventIngestionService))
 ) -> MainResponse[FightersIngestionResponse]:
@@ -133,7 +133,7 @@ async def ingest_fighters_by_link(
         return get_bad_request(message='Failed to ingest fighters by link', errors=str(exc))
 
 
-@router.post('/fighter-by-link', response_model=MainResponse[FighterResponse])
+@ingestion_router.post('/fighter-by-link', response_model=MainResponse[FighterResponse])
 async def ingest_fighter_by_link(
     request: FighterLinkRequest, service: EventIngestionService = Depends(get_service(EventIngestionService))
 ) -> MainResponse[FighterResponse]:

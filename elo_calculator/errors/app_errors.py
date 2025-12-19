@@ -44,6 +44,11 @@ class Errors(metaclass=ErrorMeta):
         description='Occurs when the request body cannot be parsed as valid JSON, often due to syntax errors or '
         'incorrect formatting',
     )
+    FORBIDDEN_ERROR = AppError(
+        message='You do not have permission to perform this action',
+        description='This error is returned when the user attempts to access a resource or perform an action they are '
+        'not authorized for',
+    )
     RESOURCE_NOT_FOUND_ERROR = AppError(
         message='The requested resource could not be found',
         description='Triggered when a requested resource does not exist or has been removed',
@@ -52,6 +57,11 @@ class Errors(metaclass=ErrorMeta):
         message='The requested HTTP method is not allowed for this resource',
         description='Occurs when a client attempts to use an HTTP method that is not supported by '
         'the requested endpoint',
+    )
+    EXTERNAL_SERVICE_ERROR = AppError(
+        message='An error occurred while communicating with an external service',
+        description='This error occurs when a failure happens while interacting with an external API or service, often '
+        'due to network issues or service unavailability',
     )
     DATABASE_ERROR = AppError(
         message='An error occurred while interacting with the database',
@@ -62,4 +72,8 @@ class Errors(metaclass=ErrorMeta):
         message='An error occurred while processing your request, please try again later',
         description='A generic server side error that occurs when an unexpected issue prevents the request from being '
         'processed successfully',
+    )
+    UNAUTHORIZED_ERROR = AppError(
+        message='Unauthorized',
+        description='This error is returned when the user is not authorized to access the requested resource',
     )

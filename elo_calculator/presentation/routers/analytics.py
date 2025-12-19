@@ -6,7 +6,7 @@ from typing import cast as _cast
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 
-from elo_calculator.application.services.analytics_service import AnalyticsService
+from elo_calculator.application.analytics_service import AnalyticsService
 from elo_calculator.presentation.dependencies import get_service
 from elo_calculator.presentation.models.analytics_models import (
     EloChangeItem,
@@ -20,10 +20,10 @@ from elo_calculator.presentation.models.analytics_models import (
 from elo_calculator.presentation.models.shared import MainResponse
 from elo_calculator.presentation.utils.response import get_bad_request, get_not_found, get_ok
 
-router = APIRouter(prefix='/analytics', tags=['analytics'])
+analytics_router = APIRouter(prefix='/analytics', tags=['Analytics'])
 
 
-@router.get('/top-elo', response_model=MainResponse[list[TopFighterResponse]])
+@analytics_router.get('/top-elo', response_model=MainResponse[list[TopFighterResponse]])
 async def top_elo(
     limit: int = Query(default=20, ge=1, le=100), service: AnalyticsService = Depends(get_service(AnalyticsService))
 ) -> MainResponse[list[TopFighterResponse]]:
@@ -31,7 +31,7 @@ async def top_elo(
     return get_ok(TopFighterResponse.from_entity_list(fighters))
 
 
-@router.get('/top-peak-elo', response_model=MainResponse[list[TopFighterResponse]])
+@analytics_router.get('/top-peak-elo', response_model=MainResponse[list[TopFighterResponse]])
 async def top_peak_elo(
     limit: int = Query(default=20, ge=1, le=100), service: AnalyticsService = Depends(get_service(AnalyticsService))
 ) -> MainResponse[list[TopFighterResponse]]:
@@ -39,7 +39,7 @@ async def top_peak_elo(
     return get_ok(TopFighterResponse.from_entity_list(fighters))
 
 
-@router.get('/fighter-elo/{fighter_id}', response_model=MainResponse[FighterEloHistoryResponse])
+@analytics_router.get('/fighter-elo/{fighter_id}', response_model=MainResponse[FighterEloHistoryResponse])
 async def fighter_elo(
     fighter_id: str, service: AnalyticsService = Depends(get_service(AnalyticsService))
 ) -> MainResponse[FighterEloHistoryResponse]:
@@ -49,7 +49,7 @@ async def fighter_elo(
     return get_ok(FighterEloHistoryResponse.from_service(fighter, points))
 
 
-@router.get('/top-elo-gains', response_model=MainResponse[list[EloChangeItem]])
+@analytics_router.get('/top-elo-gains', response_model=MainResponse[list[EloChangeItem]])
 async def top_elo_gains(
     limit: int = Query(default=20, ge=1, le=200), service: AnalyticsService = Depends(get_service(AnalyticsService))
 ) -> MainResponse[list[EloChangeItem]]:
@@ -57,7 +57,7 @@ async def top_elo_gains(
     return get_ok(EloChangeItem.from_service(items))
 
 
-@router.get('/lowest-elo-gains', response_model=MainResponse[list[EloChangeItem]])
+@analytics_router.get('/lowest-elo-gains', response_model=MainResponse[list[EloChangeItem]])
 async def lowest_elo_gains(
     limit: int = Query(default=20, ge=1, le=200), service: AnalyticsService = Depends(get_service(AnalyticsService))
 ) -> MainResponse[list[EloChangeItem]]:
@@ -65,7 +65,7 @@ async def lowest_elo_gains(
     return get_ok(EloChangeItem.from_service(items))
 
 
-@router.get('/top-elo-losses', response_model=MainResponse[list[EloChangeItem]])
+@analytics_router.get('/top-elo-losses', response_model=MainResponse[list[EloChangeItem]])
 async def top_elo_losses(
     limit: int = Query(default=20, ge=1, le=200), service: AnalyticsService = Depends(get_service(AnalyticsService))
 ) -> MainResponse[list[EloChangeItem]]:
@@ -73,7 +73,7 @@ async def top_elo_losses(
     return get_ok(EloChangeItem.from_service(items))
 
 
-@router.get('/elo-movers', response_model=MainResponse[list[EloMoverItem]])
+@analytics_router.get('/elo-movers', response_model=MainResponse[list[EloMoverItem]])
 async def elo_movers(
     direction: str = Query(default='gains', pattern='^(gains|losses|net)$'),
     window_days: int | None = Query(default=None, ge=1, le=3650),
@@ -89,7 +89,7 @@ async def elo_movers(
     return get_ok(items)
 
 
-@router.get('/top-elo-gain', response_model=MainResponse[list[dict[str, _Any]]])
+@analytics_router.get('/top-elo-gain', response_model=MainResponse[list[dict[str, _Any]]])
 async def top_elo_gain(
     limit: int = Query(default=20, ge=1, le=200), service: AnalyticsService = Depends(get_service(AnalyticsService))
 ) -> MainResponse[list[dict[str, _Any]]]:
@@ -97,7 +97,7 @@ async def top_elo_gain(
     return get_ok(items)
 
 
-@router.get('/top-peak-elo-gain', response_model=MainResponse[list[dict[str, _Any]]])
+@analytics_router.get('/top-peak-elo-gain', response_model=MainResponse[list[dict[str, _Any]]])
 async def top_peak_elo_gain(
     limit: int = Query(default=20, ge=1, le=200), service: AnalyticsService = Depends(get_service(AnalyticsService))
 ) -> MainResponse[list[dict[str, _Any]]]:
@@ -105,7 +105,7 @@ async def top_peak_elo_gain(
     return get_ok(items)
 
 
-@router.get('/random-bouts', response_model=MainResponse[list[RandomBoutItem]])
+@analytics_router.get('/random-bouts', response_model=MainResponse[list[RandomBoutItem]])
 async def random_bouts(
     limit: int = Query(default=10, ge=1, le=100), service: AnalyticsService = Depends(get_service(AnalyticsService))
 ) -> MainResponse[list[RandomBoutItem]]:
@@ -113,7 +113,7 @@ async def random_bouts(
     return get_ok(RandomBoutItem.from_service(items))
 
 
-@router.get('/rankings-history', response_model=MainResponse[list[RankingSnapshot]])
+@analytics_router.get('/rankings-history', response_model=MainResponse[list[RankingSnapshot]])
 async def rankings_history(
     start_year: int | None = Query(default=None, ge=1900),
     end_year: int | None = Query(default=None, ge=1900),
@@ -126,7 +126,7 @@ async def rankings_history(
     return get_ok(RankingSnapshot.from_service(items))
 
 
-@router.get('/yearly-elo-gains', response_model=MainResponse[list[YearlyEloGainItem]])
+@analytics_router.get('/yearly-elo-gains', response_model=MainResponse[list[YearlyEloGainItem]])
 async def yearly_elo_gains(
     year: int = Query(..., ge=1900),
     limit: int = Query(default=10, ge=1, le=20000),
@@ -138,13 +138,13 @@ async def yearly_elo_gains(
     return get_ok([YearlyEloGainItem(**x) for x in items])
 
 
-@router.get('/ranking-years', response_model=MainResponse[list[int]])
+@analytics_router.get('/ranking-years', response_model=MainResponse[list[int]])
 async def ranking_years(service: AnalyticsService = Depends(get_service(AnalyticsService))) -> MainResponse[list[int]]:
     yrs = await service.ranking_years()
     return get_ok(_cast(_Any, yrs))
 
 
-@router.get('/rankings-year', response_model=MainResponse[RankingSnapshot])
+@analytics_router.get('/rankings-year', response_model=MainResponse[RankingSnapshot])
 async def rankings_year(
     year: int = Query(..., ge=1900),
     top: int | None = Query(default=None, ge=1, le=1000),
@@ -173,7 +173,7 @@ async def rankings_year(
     return get_ok(model)
 
 
-@router.get('/h2h', response_model=MainResponse[dict[str, _Any]])
+@analytics_router.get('/h2h', response_model=MainResponse[dict[str, _Any]])
 async def h2h(  # noqa: PLR0913
     fighter1: str,
     fighter2: str,
@@ -211,7 +211,7 @@ async def h2h(  # noqa: PLR0913
 # Removed H2H calibration endpoint per product decision; probabilities remain available via /h2h
 
 
-@router.get('/hazard', response_model=MainResponse[dict[str, _Any]])
+@analytics_router.get('/hazard', response_model=MainResponse[dict[str, _Any]])
 async def hazard(
     fighter_id: str,
     five_round: str = Query(default='auto', pattern='^(auto|true|false)$'),
@@ -221,7 +221,7 @@ async def hazard(
     return get_ok(data)
 
 
-@router.get('/division', response_model=MainResponse[dict[str, _Any]])
+@analytics_router.get('/division', response_model=MainResponse[dict[str, _Any]])
 async def division_roster(
     code: int = Query(...),
     top: int = Query(default=10, ge=1, le=1000),
@@ -231,7 +231,7 @@ async def division_roster(
     return get_ok(data)
 
 
-@router.get('/form-top', response_model=MainResponse[list[dict[str, _Any]]])
+@analytics_router.get('/form-top', response_model=MainResponse[list[dict[str, _Any]]])
 async def form_top(
     window: str = Query(default='fights', pattern='^(fights|days)$'),
     n: int = Query(default=6, ge=1),
@@ -252,7 +252,7 @@ async def form_top(
     return get_ok(data)
 
 
-@router.get('/fighter-career-stats/{fighter_id}', response_model=MainResponse[dict[str, _Any]])
+@analytics_router.get('/fighter-career-stats/{fighter_id}', response_model=MainResponse[dict[str, _Any]])
 async def fighter_career_stats(
     fighter_id: str, service: AnalyticsService = Depends(get_service(AnalyticsService))
 ) -> MainResponse[dict[str, _Any]]:
@@ -260,7 +260,7 @@ async def fighter_career_stats(
     return get_ok(data)
 
 
-@router.get('/latest-event-elo', response_model=MainResponse[dict[str, _Any]])
+@analytics_router.get('/latest-event-elo', response_model=MainResponse[dict[str, _Any]])
 async def latest_event_elo(
     service: AnalyticsService = Depends(get_service(AnalyticsService)),
 ) -> MainResponse[dict[str, _Any]]:
@@ -268,7 +268,7 @@ async def latest_event_elo(
     return get_ok(data)
 
 
-@router.get('/event-elo', response_model=MainResponse[dict[str, _Any]])
+@analytics_router.get('/event-elo', response_model=MainResponse[dict[str, _Any]])
 async def event_elo(
     event_id: str = Query(...), service: AnalyticsService = Depends(get_service(AnalyticsService))
 ) -> MainResponse[dict[str, _Any]]:
@@ -276,7 +276,7 @@ async def event_elo(
     return get_ok(data)
 
 
-@router.get('/events', response_model=MainResponse[list[dict[str, _Any]]])
+@analytics_router.get('/events', response_model=MainResponse[list[dict[str, _Any]]])
 async def events_list(
     service: AnalyticsService = Depends(get_service(AnalyticsService)),
 ) -> MainResponse[list[dict[str, _Any]]]:
@@ -284,7 +284,7 @@ async def events_list(
     return get_ok(items)
 
 
-@router.get('/top-stats', response_model=MainResponse[list[dict[str, _Any]]])
+@analytics_router.get('/top-stats', response_model=MainResponse[list[dict[str, _Any]]])
 async def top_stats(
     metric: str = Query(
         ...,
@@ -303,7 +303,7 @@ async def top_stats(
     return get_ok(items)
 
 
-@router.get('/plusminus', response_model=MainResponse[dict[str, _Any]])
+@analytics_router.get('/plusminus', response_model=MainResponse[dict[str, _Any]])
 async def plus_minus(
     fighter_id: str,
     metric: str = Query(
@@ -319,7 +319,7 @@ async def plus_minus(
     return get_ok(data)
 
 
-@router.get('/consistency-versatility', response_model=MainResponse[dict[str, _Any]])
+@analytics_router.get('/consistency-versatility', response_model=MainResponse[dict[str, _Any]])
 async def consistency_versatility(
     fighter_id: str,
     k: int = Query(default=6, ge=2, le=30),
@@ -329,7 +329,7 @@ async def consistency_versatility(
     return get_ok(data)
 
 
-@router.get('/divisions', response_model=MainResponse[list[dict[str, _Any]]])
+@analytics_router.get('/divisions', response_model=MainResponse[list[dict[str, _Any]]])
 async def divisions(
     service: AnalyticsService = Depends(get_service(AnalyticsService)),
 ) -> MainResponse[list[dict[str, _Any]]]:
@@ -337,7 +337,7 @@ async def divisions(
     return get_ok(items)
 
 
-@router.get('/division-rankings', response_model=MainResponse[list[dict[str, _Any]]])
+@analytics_router.get('/division-rankings', response_model=MainResponse[list[dict[str, _Any]]])
 async def division_rankings(
     division: int = Query(...),
     metric: str = Query(default='current', pattern='^(current|peak|gains)$'),
@@ -352,7 +352,7 @@ async def division_rankings(
     return get_ok(items)
 
 
-@router.get('/division-parity', response_model=MainResponse[dict[str, _Any]])
+@analytics_router.get('/division-parity', response_model=MainResponse[dict[str, _Any]])
 async def division_parity(
     division: int = Query(...),
     year: int | None = Query(default=None, ge=1900),
@@ -362,7 +362,7 @@ async def division_parity(
     return get_ok(data)
 
 
-@router.get('/division-churn', response_model=MainResponse[dict[str, _Any]])
+@analytics_router.get('/division-churn', response_model=MainResponse[dict[str, _Any]])
 async def division_churn(
     division: int = Query(...),
     year: int = Query(..., ge=1900),
@@ -372,7 +372,7 @@ async def division_churn(
     return get_ok(data)
 
 
-@router.get('/form', response_model=MainResponse[dict[str, _Any]])
+@analytics_router.get('/form', response_model=MainResponse[dict[str, _Any]])
 async def form_index(
     fighter_id: str,
     window: str = Query(default='fights', pattern='^(fights|days)$'),
@@ -384,7 +384,7 @@ async def form_index(
     return get_ok(data)
 
 
-@router.get('/momentum', response_model=MainResponse[dict[str, _Any]])
+@analytics_router.get('/momentum', response_model=MainResponse[dict[str, _Any]])
 async def momentum(
     fighter_id: str,
     k: int = Query(default=6, ge=2, le=50),
@@ -394,7 +394,7 @@ async def momentum(
     return get_ok(data)
 
 
-@router.get('/rates', response_model=MainResponse[dict[str, _Any]])
+@analytics_router.get('/rates', response_model=MainResponse[dict[str, _Any]])
 async def rates(
     fighter_id: str, service: AnalyticsService = Depends(get_service(AnalyticsService))
 ) -> MainResponse[dict[str, _Any]]:
@@ -402,7 +402,7 @@ async def rates(
     return get_ok(data)
 
 
-@router.get('/event-shock', response_model=MainResponse[dict[str, _Any]])
+@analytics_router.get('/event-shock', response_model=MainResponse[dict[str, _Any]])
 async def event_shock(
     event_id: str | None = Query(default=None), service: AnalyticsService = Depends(get_service(AnalyticsService))
 ) -> MainResponse[dict[str, _Any]]:
@@ -410,7 +410,7 @@ async def event_shock(
     return get_ok(data)
 
 
-@router.get('/latest-event-shock', response_model=MainResponse[dict[str, _Any]])
+@analytics_router.get('/latest-event-shock', response_model=MainResponse[dict[str, _Any]])
 async def latest_event_shock(
     service: AnalyticsService = Depends(get_service(AnalyticsService)),
 ) -> MainResponse[dict[str, _Any]]:
@@ -418,7 +418,7 @@ async def latest_event_shock(
     return get_ok(data)
 
 
-@router.get('/events-shock-top', response_model=MainResponse[list[dict[str, _Any]]])
+@analytics_router.get('/events-shock-top', response_model=MainResponse[list[dict[str, _Any]]])
 async def events_shock_top(
     limit: int = Query(default=5, ge=1, le=50),
     order: str | None = Query(default=None, pattern='^(asc|desc)$'),
@@ -440,7 +440,7 @@ async def events_shock_top(
     return get_ok(data)
 
 
-@router.get('/sos', response_model=MainResponse[dict[str, _Any]])
+@analytics_router.get('/sos', response_model=MainResponse[dict[str, _Any]])
 async def sos(
     fighter_id: str,
     window: str = Query(default='days', pattern='^(days|fights)$'),
@@ -451,7 +451,7 @@ async def sos(
     return get_ok(data)
 
 
-@router.get('/quality-wins', response_model=MainResponse[dict[str, _Any]])
+@analytics_router.get('/quality-wins', response_model=MainResponse[dict[str, _Any]])
 async def quality_wins(
     fighter_id: str,
     elo_threshold: float = Query(..., ge=0.0),
@@ -461,7 +461,7 @@ async def quality_wins(
     return get_ok(data)
 
 
-@router.get('/style-profile', response_model=MainResponse[dict[str, _Any]])
+@analytics_router.get('/style-profile', response_model=MainResponse[dict[str, _Any]])
 async def style_profile(
     fighter_id: str, service: AnalyticsService = Depends(get_service(AnalyticsService))
 ) -> MainResponse[dict[str, _Any]]:

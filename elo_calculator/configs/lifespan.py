@@ -1,24 +1,35 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any
 
 from fastapi import FastAPI
 
-from elo_calculator.application.services.analytics_service import AnalyticsService
+from elo_calculator.application.analytics_service import AnalyticsService
 from elo_calculator.configs.log import get_logger
 from elo_calculator.infrastructure.database.data_seeder import seed_data
+
+logger = get_logger()
 
 RECENT_YEARS_WARM = 20
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI) -> AsyncIterator[Any]:
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """Application lifespan context.
+
+    Runs data seeding on startup and optionally warms the analytics cache.
+    Any exception during seeding or warmup is logged as a warning.
+    """
     # Load optional calibration/nudge artifacts for H2H at startup
     try:
         AnalyticsService.init_artifacts()
-    except Exception as exc:  # best-effort
-        get_logger().warning('Artifact init failed: %r', exc)
-    await seed_data()
+    except Exception as exc:
+        logger.warning(f'Artifact init failed: {exc!r}')
+
+    try:
+        await seed_data()
+    except Exception as e:
+        logger.warning(f'Database seeding failed (this is normal if data already exists): {e}')
+
     # Warm Redis analytics for last X years
     try:
         svc = AnalyticsService()
@@ -34,5 +45,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[Any]:
                 await svc.yearly_elo_gains(year=y, limit=30)
     except Exception as exc:
         # Warming is best-effort; avoid blocking startup
-        get_logger().warning('Analytics warmup failed: %r', exc)
+        logger.warning(f'Analytics warmup failed: {exc!r}')
+
+    # Yield control to allow the application to start; no special teardown logic.
     yield

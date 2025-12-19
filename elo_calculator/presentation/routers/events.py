@@ -2,17 +2,17 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 
-from elo_calculator.application.services.event_service import EventService
+from elo_calculator.application.event_service import EventService
 from elo_calculator.domain.entities import Event
 from elo_calculator.presentation.dependencies import get_service
 from elo_calculator.presentation.models.event_models import EventCreateRequest, EventResponse
 from elo_calculator.presentation.models.shared import MainResponse
 from elo_calculator.presentation.utils.response import get_not_found, get_ok
 
-router = APIRouter(prefix='/events', tags=['events'])
+events_router = APIRouter(prefix='/events', tags=['Events'])
 
 
-@router.get('/', response_model=MainResponse[list[EventResponse]])
+@events_router.get('/', response_model=MainResponse[list[EventResponse]])
 async def list_events(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=100, ge=1, le=1000),
@@ -22,7 +22,7 @@ async def list_events(
     return get_ok(EventResponse.from_entity_list(events))
 
 
-@router.post('/', response_model=MainResponse[EventResponse])
+@events_router.post('/', response_model=MainResponse[EventResponse])
 async def create_event(
     request: EventCreateRequest, service: EventService = Depends(get_service(EventService))
 ) -> MainResponse[EventResponse]:
@@ -31,7 +31,7 @@ async def create_event(
     return get_ok(EventResponse.from_entity(created))
 
 
-@router.get('/by-link', response_model=MainResponse[EventResponse])
+@events_router.get('/by-link', response_model=MainResponse[EventResponse])
 async def get_event_by_link(
     event_link: str = Query(..., description='Canonical event link URL'),
     service: EventService = Depends(get_service(EventService)),
@@ -42,7 +42,7 @@ async def get_event_by_link(
     return get_ok(EventResponse.from_entity(event))
 
 
-@router.get('/{event_id}', response_model=MainResponse[EventResponse])
+@events_router.get('/{event_id}', response_model=MainResponse[EventResponse])
 async def get_event(
     event_id: UUID, service: EventService = Depends(get_service(EventService))
 ) -> MainResponse[EventResponse]:

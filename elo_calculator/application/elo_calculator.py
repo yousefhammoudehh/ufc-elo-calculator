@@ -31,7 +31,7 @@ from typing import Any, Optional, Protocol, runtime_checkable, cast
 import re
 
 from elo_calculator.domain.shared.enumerations import FightOutcome
-from elo_calculator.application.services.performance_score import compute_ps_from_row
+from elo_calculator.application.performance_score import compute_ps_from_row
 
 
 class HasResultPromotion(Protocol):

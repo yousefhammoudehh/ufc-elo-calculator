@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from elo_calculator.application.services.event_elo_service import EventEloResult
+from elo_calculator.application.event_elo_service import EventEloResult
 from elo_calculator.presentation.models.shared import DataModel
 
 

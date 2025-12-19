@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import update as sa_update
 
 from elo_calculator.application.base_service import BaseService
-from elo_calculator.application.services.elo_calculator import PromotionsRepoProtocol, compute_starting_elo
+from elo_calculator.application.elo_calculator import PromotionsRepoProtocol, compute_starting_elo
 from elo_calculator.configs.log import get_logger
 from elo_calculator.domain.client.event_scraper_port import EventScraperPort
 from elo_calculator.domain.client.fighter_scraper_port import FighterScraperPort

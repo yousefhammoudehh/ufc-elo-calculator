@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 from elo_calculator.application.base_service import BaseService
-from elo_calculator.application.services.elo_calculator import EntryEloParams, PromotionsRepoProtocol, compute_entry_elo
+from elo_calculator.application.elo_calculator import EntryEloParams, PromotionsRepoProtocol, compute_entry_elo
 from elo_calculator.domain.entities import Fighter, PreUfcBout, Promotion
 from elo_calculator.infrastructure.repositories.unit_of_work import UnitOfWork, with_uow
 

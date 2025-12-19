@@ -1,15 +1,15 @@
 from fastapi import APIRouter, Depends
 
-from elo_calculator.application.services.bout_participant_service import BoutParticipantService
+from elo_calculator.application.bout_participant_service import BoutParticipantService
 from elo_calculator.presentation.dependencies import get_service
 from elo_calculator.presentation.models.bout_participant_models import BoutParticipantResponse
 from elo_calculator.presentation.models.shared import MainResponse
 from elo_calculator.presentation.utils.response import get_not_found, get_ok
 
-router = APIRouter(prefix='/bout-participants', tags=['bout-participants'])
+bout_participants_router = APIRouter(prefix='/bout-participants', tags=['Bout Participants'])
 
 
-@router.get('/by-bout/{bout_id}', response_model=MainResponse[list[BoutParticipantResponse]])
+@bout_participants_router.get('/by-bout/{bout_id}', response_model=MainResponse[list[BoutParticipantResponse]])
 async def list_by_bout(
     bout_id: str, service: BoutParticipantService = Depends(get_service(BoutParticipantService))
 ) -> MainResponse[list[BoutParticipantResponse]]:
@@ -17,7 +17,7 @@ async def list_by_bout(
     return get_ok(BoutParticipantResponse.from_entity_list(participants))
 
 
-@router.get('/by-fighter/{fighter_id}', response_model=MainResponse[list[BoutParticipantResponse]])
+@bout_participants_router.get('/by-fighter/{fighter_id}', response_model=MainResponse[list[BoutParticipantResponse]])
 async def list_by_fighter(
     fighter_id: str, service: BoutParticipantService = Depends(get_service(BoutParticipantService))
 ) -> MainResponse[list[BoutParticipantResponse]]:
@@ -25,7 +25,7 @@ async def list_by_fighter(
     return get_ok(BoutParticipantResponse.from_entity_list(participants))
 
 
-@router.get('/{bout_id}/{fighter_id}', response_model=MainResponse[BoutParticipantResponse])
+@bout_participants_router.get('/{bout_id}/{fighter_id}', response_model=MainResponse[BoutParticipantResponse])
 async def get_bout_participant(
     bout_id: str, fighter_id: str, service: BoutParticipantService = Depends(get_service(BoutParticipantService))
 ) -> MainResponse[BoutParticipantResponse]:
@@ -35,7 +35,7 @@ async def get_bout_participant(
     return get_ok(BoutParticipantResponse.from_entity(participant))
 
 
-@router.get('/record/{fighter_id}', response_model=MainResponse[dict[str, int]])
+@bout_participants_router.get('/record/{fighter_id}', response_model=MainResponse[dict[str, int]])
 async def fighter_record(
     fighter_id: str, service: BoutParticipantService = Depends(get_service(BoutParticipantService))
 ) -> MainResponse[dict[str, int]]:

@@ -1,16 +1,16 @@
 from fastapi import APIRouter, Depends, Query
 
-from elo_calculator.application.services.fighter_service import FighterService
+from elo_calculator.application.fighter_service import FighterService
 from elo_calculator.domain.entities import Fighter
 from elo_calculator.presentation.dependencies import get_service
 from elo_calculator.presentation.models.fighter_models import FighterCreateRequest, FighterResponse
 from elo_calculator.presentation.models.shared import MainResponse
 from elo_calculator.presentation.utils.response import get_not_found, get_ok
 
-router = APIRouter(prefix='/fighters', tags=['fighters'])
+fighters_router = APIRouter(prefix='/fighters', tags=['Fighters'])
 
 
-@router.get('/', response_model=MainResponse[list[FighterResponse]])
+@fighters_router.get('/', response_model=MainResponse[list[FighterResponse]])
 async def list_fighters(
     service: FighterService = Depends(get_service(FighterService)),
 ) -> MainResponse[list[FighterResponse]]:
@@ -21,7 +21,7 @@ async def list_fighters(
 # NOTE: Keep parameterized route at the bottom to avoid shadowing static subpaths like /search or /search-paginated
 
 
-@router.post('/', response_model=MainResponse[FighterResponse])
+@fighters_router.post('/', response_model=MainResponse[FighterResponse])
 async def create_fighter(
     request: FighterCreateRequest, service: FighterService = Depends(get_service(FighterService))
 ) -> MainResponse[FighterResponse]:
@@ -30,7 +30,7 @@ async def create_fighter(
     return get_ok(FighterResponse.from_entity(created))
 
 
-@router.get('/by-stats-link', response_model=MainResponse[FighterResponse])
+@fighters_router.get('/by-stats-link', response_model=MainResponse[FighterResponse])
 async def get_fighter_by_stats_link(
     stats_link: str = Query(..., description='Canonical stats link URL'),
     service: FighterService = Depends(get_service(FighterService)),
@@ -41,7 +41,7 @@ async def get_fighter_by_stats_link(
     return get_ok(FighterResponse.from_entity(fighter))
 
 
-@router.get('/by-tapology-link', response_model=MainResponse[FighterResponse])
+@fighters_router.get('/by-tapology-link', response_model=MainResponse[FighterResponse])
 async def get_fighter_by_tapology_link(
     tapology_link: str = Query(..., description='Canonical Tapology link URL'),
     service: FighterService = Depends(get_service(FighterService)),
@@ -52,7 +52,7 @@ async def get_fighter_by_tapology_link(
     return get_ok(FighterResponse.from_entity(fighter))
 
 
-@router.get('/search', response_model=MainResponse[list[FighterResponse]])
+@fighters_router.get('/search', response_model=MainResponse[list[FighterResponse]])
 async def search_fighters(
     q: str = Query(..., min_length=1, description='Case-insensitive substring to search in fighter names'),
     limit: int = Query(20, ge=1, le=100),
@@ -62,7 +62,7 @@ async def search_fighters(
     return get_ok(FighterResponse.from_entity_list(results))
 
 
-@router.get('/search-paginated')
+@fighters_router.get('/search-paginated')
 async def search_fighters_paginated(
     q: str = Query('', description='Case-insensitive substring to search in fighter names'),
     page: int = Query(1, ge=1),
@@ -84,7 +84,7 @@ async def search_fighters_paginated(
     )
 
 
-@router.get('/{fighter_id}', response_model=MainResponse[FighterResponse])
+@fighters_router.get('/{fighter_id}', response_model=MainResponse[FighterResponse])
 async def get_fighter(
     fighter_id: str, service: FighterService = Depends(get_service(FighterService))
 ) -> MainResponse[FighterResponse]:

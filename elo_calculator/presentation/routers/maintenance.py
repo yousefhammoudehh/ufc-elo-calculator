@@ -2,9 +2,9 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 
-from elo_calculator.application.services.cache_maintenance_service import CacheMaintenanceService
-from elo_calculator.application.services.entry_elo_service import EntryEloService
-from elo_calculator.application.services.maintenance_service import MaintenanceService
+from elo_calculator.application.cache_maintenance_service import CacheMaintenanceService
+from elo_calculator.application.entry_elo_service import EntryEloService
+from elo_calculator.application.maintenance_service import MaintenanceService
 from elo_calculator.presentation.dependencies import get_service
 from elo_calculator.presentation.models.maintenance_models import (
     CacheFlushResponse,
@@ -16,10 +16,10 @@ from elo_calculator.presentation.models.maintenance_models import (
 from elo_calculator.presentation.models.shared import MainResponse
 from elo_calculator.presentation.utils.response import get_ok
 
-router = APIRouter(prefix='/maintenance', tags=['maintenance'])
+maintenance_router = APIRouter(prefix='/maintenance', tags=['Maintenance'])
 
 
-@router.post('/cache/flush', response_model=MainResponse[CacheFlushResponse])
+@maintenance_router.post('/cache/flush', response_model=MainResponse[CacheFlushResponse])
 async def flush_cache(
     service: CacheMaintenanceService = Depends(get_service(CacheMaintenanceService)),
 ) -> MainResponse[CacheFlushResponse]:
@@ -27,7 +27,7 @@ async def flush_cache(
     return get_ok(CacheFlushResponse(**payload))
 
 
-@router.post('/cache/invalidate', response_model=MainResponse[CacheInvalidateResponse])
+@maintenance_router.post('/cache/invalidate', response_model=MainResponse[CacheInvalidateResponse])
 async def invalidate_cache(
     request: CacheInvalidateRequest, service: CacheMaintenanceService = Depends(get_service(CacheMaintenanceService))
 ) -> MainResponse[CacheInvalidateResponse]:
@@ -36,7 +36,7 @@ async def invalidate_cache(
     return get_ok(CacheInvalidateResponse(**result))
 
 
-@router.post('/elo/reseed', response_model=MainResponse[EntryEloReseedResponse])
+@maintenance_router.post('/elo/reseed', response_model=MainResponse[EntryEloReseedResponse])
 async def reseed_starting_elo(
     request: EntryEloReseedRequest, service: EntryEloService = Depends(get_service(EntryEloService))
 ) -> MainResponse[EntryEloReseedResponse]:
@@ -51,7 +51,7 @@ async def reseed_starting_elo(
     return get_ok(EntryEloReseedResponse(**result))
 
 
-@router.post('/sync-fighters', response_model=MainResponse[dict[str, Any]])
+@maintenance_router.post('/sync-fighters', response_model=MainResponse[dict[str, Any]])
 async def sync_fighters(
     throttle_ms: int = Query(default=250, ge=0, le=2000),
     service: MaintenanceService = Depends(get_service(MaintenanceService)),
@@ -60,7 +60,7 @@ async def sync_fighters(
     return get_ok(summary)
 
 
-@router.post('/seed-event-names', response_model=MainResponse[dict[str, Any]])
+@maintenance_router.post('/seed-event-names', response_model=MainResponse[dict[str, Any]])
 async def seed_event_names(
     throttle_ms: int = Query(default=250, ge=0, le=2000),
     service: MaintenanceService = Depends(get_service(MaintenanceService)),

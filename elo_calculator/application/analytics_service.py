@@ -17,7 +17,7 @@ from typing import Any, ClassVar, cast
 from uuid import UUID
 
 from elo_calculator.application.base_service import BaseService
-from elo_calculator.application.services.elo_calculator import SCALE_S, logistic_expect, method_class
+from elo_calculator.application.elo_calculator import SCALE_S, logistic_expect, method_class
 from elo_calculator.configs.log import get_logger
 from elo_calculator.domain.entities import Bout, BoutParticipant, Event, Fighter
 from elo_calculator.domain.shared.enumerations import WEIGHT_CLASS_MAX_LBS, FightOutcome, WeightClassCode
