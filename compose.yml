@@ -1,0 +1,81 @@
+---
+services:
+  ufc-elo-calculator-base:
+    build:
+      context: .
+    container_name: ufc-elo-calculator-base
+    env_file:
+      - .env.scraper
+    volumes:
+      - ${PWD}:/app
+      - ../seeder_data:/app/seeder_data:ro
+    environment:
+      - DB_HOST=ufc-elo-calculator-postgres
+      - DB_NAME=postgres
+      - DB_PASSWORD=postgres
+      - DB_PORT=5432
+      - DB_USERNAME=postgres
+      - ENVIRONMENT=development
+      - LOG_LEVEL=DEBUG
+      - REDIS_HOST=ufc-elo-calculator-redis
+      - REDIS_PORT=6379
+      - REDIS_MAX_CONNECTIONS=10
+      - CACHING_SECRET=dev-secret-change-in-production
+      - VIRTUAL_HOST=ufc-elo-calculator.docker
+    command: ['echo', 'I only exist to be extended']
+
+  ufc-elo-calculator:
+    extends: ufc-elo-calculator-base
+    container_name: ufc-elo-calculator
+    ports:
+      - "80:80"
+    depends_on:
+      - ufc-elo-calculator-postgres
+      - ufc-elo-calculator-redis
+    command: ['sh', 'bin/boot.sh']
+
+  ufc-elo-calculator-postgres:
+    image: postgres:17.1
+    container_name: ufc-elo-calculator-postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - VIRTUAL_HOST=ufc-elo-calculator-postgres.docker
+
+  ufc-elo-calculator-redis:
+    image: redis:7-alpine
+    container_name: ufc-elo-calculator-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    environment:
+      - VIRTUAL_HOST=ufc-elo-calculator-redis.docker
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  ufc-elo-calculator-test:
+    extends: ufc-elo-calculator-base
+    container_name: ufc-elo-calculator-test
+    command: ['python', '-W', 'always::DeprecationWarning', '-m', 'pytest']
+
+  ufc-elo-calculator-lint:
+    extends: ufc-elo-calculator-base
+    container_name: ufc-elo-calculator-base-lint
+    command: >
+      /bin/sh -c "make lint"
+
+volumes:
+  postgres-data:
+    driver: local
+  redis-data:
+    driver: local

@@ -1,0 +1,36 @@
+# OS / editor
+.DS_Store
+.vscode/
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.so
+
+# Virtual environments
+env/
+venv/
+.venv/
+
+# Test and lint caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Notebook checkpoints
+.ipynb_checkpoints/
+
+# Local env files
+.env
+.env.*
+
+# Local-only raw datasets
+/jsons/
