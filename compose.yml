@@ -8,7 +8,7 @@ services:
       - .env.scraper
     volumes:
       - ${PWD}:/app
-      - ../seeder_data:/app/seeder_data:ro
+      - ./seeder_data:/app/seeder_data:ro
     environment:
       - DB_HOST=ufc-elo-calculator-postgres
       - DB_NAME=postgres

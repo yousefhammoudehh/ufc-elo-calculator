@@ -28,3 +28,7 @@ Core base components:
 - Build: `make build`
 - Run: `make run`
 - Stop: `make down`
+
+## Data Normalization
+
+- Example walkthrough notebook: `notebooks/01_normalized_fighter_walkthrough.ipynb`
