@@ -32,3 +32,16 @@ Core base components:
 ## Data Normalization
 
 - Example walkthrough notebook: `notebooks/01_normalized_fighter_walkthrough.ipynb`
+
+## Ranking Systems
+
+Math and implementation docs:
+- `elo_calculator/application/ranking/`
+
+System notebooks (no DB dependency, CSV/local examples only):
+- `notebooks/10_system_a_elo_ps_math.ipynb`
+- `notebooks/11_system_b_glicko2_ps_math.ipynb`
+- `notebooks/12_system_c_dynamic_factor_math.ipynb`
+- `notebooks/13_system_d_stacked_logit_math.ipynb`
+- `notebooks/14_system_e_ewr_math.ipynb`
+- `notebooks/15_ps_round_math.ipynb`
