@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urlparse
 from uuid import UUID
 
 from elo_calculator.configs import env
@@ -12,6 +12,7 @@ from elo_calculator.domain.shared.enumerations import FighterGenderEnum
 MMSS_RE = re.compile(r'^\s*(\d+):(\d{2})\s*$')
 ROUND_RE = re.compile(r'R(\d+)', re.IGNORECASE)
 TIME_RE = re.compile(r'(\d+):(\d{2})')
+PREFIGHT_RECORD_RE = re.compile(r'\d+')
 TAPOLOGY_FIGHTER_ID_RE = re.compile(r'/fighters/([^/?#]+)')
 UFCSTATS_ID_RE = re.compile(r'/(?:fighter|event|fight)-details/([0-9a-fA-F]{16})(?:[/?#]|$)')
 UFCSTATS_HEX_ID_RE = re.compile(r'^[0-9a-fA-F]{16}$')
@@ -133,6 +134,23 @@ def parse_round_value(raw_value: str | None) -> int | None:
     return parse_int(value)
 
 
+def parse_prefight_record_total(raw_value: str | None) -> int | None:
+    value = clean_text(raw_value)
+    if value is None:
+        return None
+
+    lowered = value.lower()
+    if lowered in {'n/a', 'na', 'none', '--'}:
+        return None
+
+    # Record strings are stored as W-L[-D], with optional notes like "(1 NC)".
+    core_record = lowered.split('(', maxsplit=1)[0].strip()
+    numbers = [int(token) for token in PREFIGHT_RECORD_RE.findall(core_record)]
+    if len(numbers) < 2:  # noqa: PLR2004
+        return None
+    return sum(numbers)
+
+
 def parse_tapology_fighter_id_from_url(raw_url: str | None) -> str | None:
     value = clean_text(raw_url)
     if value is None:
@@ -141,6 +159,18 @@ def parse_tapology_fighter_id_from_url(raw_url: str | None) -> str | None:
     if matched is None:
         return None
     return clean_text(matched.group(1))
+
+
+def parse_tapology_slug_from_url(raw_url: str | None) -> str | None:
+    value = clean_text(raw_url)
+    if value is None:
+        return None
+    parsed = urlparse(value)
+    path = parsed.path.strip('/')
+    if not path:
+        return None
+    segment = path.split('/')[-1]
+    return clean_text(segment)
 
 
 def normalize_ufcstats_id(raw_id: str | None) -> str | None:

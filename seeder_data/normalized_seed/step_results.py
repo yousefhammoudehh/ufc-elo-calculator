@@ -14,7 +14,7 @@ from elo_calculator.domain.shared.enumerations import (
     normalize_ufcstats_method_group,
 )
 from elo_calculator.infrastructure.database import schema as db_schema
-from seeder_data.normalized_seed.helpers import clean_text, parse_datetime_value, parse_int
+from seeder_data.normalized_seed.helpers import clean_text, parse_datetime_value
 from seeder_data.normalized_seed.normalizers import derive_ufc_outcomes, normalize_decision_for_outcome
 
 if TYPE_CHECKING:
@@ -161,10 +161,10 @@ def seed_participants(seeder: NormalizedCsvSeeder, conn: Connection) -> None:  #
         records_by_key[blue_key] = blue_row
 
     for row in seeder.frames['tapology_bout_fighters.csv'].itertuples(index=False):
-        tapology_bout_id = parse_int(clean_text(row.tapology_bout_id))
-        if tapology_bout_id is None:
+        tapology_bout_ref = clean_text(row.tapology_bout_id)
+        if tapology_bout_ref is None:
             continue
-        bout_id = seeder.bout_id_by_tapology.get(tapology_bout_id)
+        bout_id = seeder.bout_id_by_tapology.get(tapology_bout_ref)
         if bout_id is None:
             continue
         fighter_source_id = clean_text(row.tapology_fighter_id)

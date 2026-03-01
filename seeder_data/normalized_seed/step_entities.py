@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import Connection, select
 
@@ -29,6 +29,7 @@ from seeder_data.normalized_seed.helpers import (
     parse_int,
     parse_mmss_to_seconds,
     parse_round_and_time_from_details,
+    parse_tapology_slug_from_url,
     parse_uuid_value,
 )
 from seeder_data.normalized_seed.normalizers import infer_ruleset, parse_weight_class
@@ -223,53 +224,73 @@ def seed_fighters(seeder: NormalizedCsvSeeder, conn: Connection) -> None:  # noq
     seeder.bulk_insert(conn, db_schema.bridge_fighter_source_table, list(bridge_rows_by_key.values()))
 
 
-def build_ufc_to_tapology_event_map(seeder: NormalizedCsvSeeder) -> dict[str, int]:
-    bout_map = seeder.frames['bout_id_map.csv'][['ufcstats_fight_id', 'tapology_bout_id']]
-    tapology_bouts = seeder.frames['tapology_bouts.csv'][['tapology_bout_id', 'event_tapology_id']]
-    ufcstats_fights = seeder.frames['ufcstats_fights.csv'][['ufcstats_fight_id', 'ufcstats_event_id']]
+def build_ufc_to_tapology_event_map(
+    seeder: NormalizedCsvSeeder, allowed_ufc_event_ids: set[str]
+) -> dict[str, dict[str, Any]]:
+    bout_to_tapology_event_slug: dict[str, str] = {}
+    for row in seeder.frames['tapology_bouts.csv'].itertuples(index=False):
+        tapology_bout_ref = clean_text(row.tapology_bout_id)
+        tapology_event_slug = clean_text(getattr(row, 'event_tapology_slug', None)) or parse_tapology_slug_from_url(
+            clean_text(row.event_tapology_url)
+        )
+        if tapology_bout_ref is not None and tapology_event_slug is not None:
+            bout_to_tapology_event_slug[tapology_bout_ref] = tapology_event_slug
 
-    merged = bout_map.merge(tapology_bouts, on='tapology_bout_id', how='left').merge(
-        ufcstats_fights, on='ufcstats_fight_id', how='left'
+    fight_to_ufc_event: dict[str, str] = {}
+    for row in seeder.frames['ufcstats_fights.csv'].itertuples(index=False):
+        ufcstats_fight_id = clean_text(row.ufcstats_fight_id)
+        ufcstats_event_id = clean_text(row.ufcstats_event_id)
+        if ufcstats_fight_id and ufcstats_event_id:
+            fight_to_ufc_event[ufcstats_fight_id] = ufcstats_event_id
+
+    pair_counts: dict[tuple[str, str], int] = {}
+    total_counts_by_ufc_event: dict[str, int] = {}
+    for row in seeder.frames['bout_id_map.csv'].itertuples(index=False):
+        ufcstats_fight_id = clean_text(row.ufcstats_fight_id)
+        tapology_bout_ref = clean_text(row.tapology_bout_id)
+        if ufcstats_fight_id is None or tapology_bout_ref is None:
+            continue
+        ufcstats_event_id = fight_to_ufc_event.get(ufcstats_fight_id)
+        tapology_event_slug = bout_to_tapology_event_slug.get(tapology_bout_ref)
+        if ufcstats_event_id is None or tapology_event_slug is None or ufcstats_event_id not in allowed_ufc_event_ids:
+            continue
+        pair_key = (ufcstats_event_id, tapology_event_slug)
+        pair_counts[pair_key] = pair_counts.get(pair_key, 0) + 1
+        total_counts_by_ufc_event[ufcstats_event_id] = total_counts_by_ufc_event.get(ufcstats_event_id, 0) + 1
+
+    ranked_pairs = sorted(
+        (
+            (count, ufcstats_event_id, tapology_event_slug)
+            for (ufcstats_event_id, tapology_event_slug), count in pair_counts.items()
+        ),
+        key=lambda item: (-item[0], item[1], item[2]),
     )
-    merged = merged[(merged['ufcstats_event_id'] != '') & (merged['event_tapology_id'] != '')]
 
-    mapping: dict[str, int] = {}
-    if merged.empty:
-        return mapping
-
-    counts = (
-        merged.groupby(['ufcstats_event_id', 'event_tapology_id'], as_index=False)
-        .size()
-        .sort_values('size', ascending=False)
-    )
-    for ufcstats_event_id, group in counts.groupby('ufcstats_event_id'):
-        tapology_event_id = parse_int(clean_text(group.iloc[0]['event_tapology_id']))
-        if tapology_event_id is not None:
-            mapping[str(ufcstats_event_id)] = tapology_event_id
+    mapping: dict[str, dict[str, Any]] = {}
+    used_ufc_events: set[str] = set()
+    used_tapology_events: set[str] = set()
+    for mapped_count, ufcstats_event_id, tapology_event_slug in ranked_pairs:
+        if ufcstats_event_id in used_ufc_events or tapology_event_slug in used_tapology_events:
+            continue
+        total = total_counts_by_ufc_event.get(ufcstats_event_id, mapped_count)
+        confidence = Decimal(mapped_count) / Decimal(total)
+        mapping[ufcstats_event_id] = {
+            'tapology_event_slug': tapology_event_slug,
+            'mapped_bout_count': mapped_count,
+            'confidence': confidence.quantize(Decimal('0.0001')),
+        }
+        used_ufc_events.add(ufcstats_event_id)
+        used_tapology_events.add(tapology_event_slug)
     return mapping
 
 
-def seed_events(seeder: NormalizedCsvSeeder, conn: Connection) -> None:  # noqa: PLR0915
-    events_by_key: dict[str, dict] = {}
-    ufc_to_tapology_event = build_ufc_to_tapology_event_map(seeder)
-    ufcstats_event_extras: dict[str, dict] = {}
+def seed_events(seeder: NormalizedCsvSeeder, conn: Connection) -> None:
+    ufcstats_events: dict[str, dict] = {}
+    tapology_events: dict[str, dict] = {}
 
-    for row in seeder.frames['ufcstats_events_2025.csv'].itertuples(index=False):
-        event_id = clean_text(row.event_id)
-        if event_id is None:
-            continue
-        ufcstats_event_extras[event_id] = row._asdict()
+    analysis_cutoff_date = date(2025, 12, 31)
 
-    def promotion_id_for(promotion_tapology_id: str | None, promotion_name: str | None) -> object | None:
-        parsed_tapology_id = parse_int(clean_text(promotion_tapology_id))
-        if parsed_tapology_id is not None and parsed_tapology_id in seeder.promotion_id_by_tapology_id:
-            return seeder.promotion_id_by_tapology_id[parsed_tapology_id]
-        normalized_name = clean_text(promotion_name)
-        if normalized_name is None:
-            return None
-        return seeder.promotion_id_by_name.get(normalized_name.lower())
-
-    def merge_event_record(target: dict, candidate: dict) -> dict:
+    def merge_record(target: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
         for field_name, value in candidate.items():
             if value is None:
                 continue
@@ -277,94 +298,156 @@ def seed_events(seeder: NormalizedCsvSeeder, conn: Connection) -> None:  # noqa:
                 target[field_name] = value
         return target
 
-    def register_tapology_event(row: dict) -> None:
-        tapology_event_id = parse_int(clean_text(row.get('event_tapology_id')))
-        key = f'tap:{tapology_event_id}' if tapology_event_id is not None else None
-        if key is None:
-            event_url = clean_text(row.get('event_tapology_url'))
-            event_name = clean_text(row.get('event_name')) or 'Unknown Event'
-            event_date = clean_text(row.get('event_date')) or clean_text(row.get('event_date_raw')) or '1900-01-01'
-            key = f'tap-fallback:{event_url or event_name}:{event_date}'
-
-        candidate = {
-            'event_date': parse_date_value(clean_text(row.get('event_date')))
-            or parse_date_value(clean_text(row.get('event_date_raw'))),
-            'event_date_raw': clean_text(row.get('event_date_raw')),
-            'event_name': clean_text(row.get('event_name')) or 'Unknown Event',
-            'promotion_id': promotion_id_for(row.get('promotion_tapology_id'), row.get('promotion_name')),
-            'tapology_event_id': tapology_event_id,
-            'tapology_event_url': clean_text(row.get('event_tapology_url')),
-            'location': None,
-            'source_file': None,
-        }
-        events_by_key[key] = merge_event_record(events_by_key.get(key, {}), candidate)
-
-    for row in seeder.frames['tapology_events.csv'].to_dict('records'):
-        register_tapology_event(row)
-
-    for row in seeder.frames['tapology_bouts.csv'].to_dict('records'):
-        register_tapology_event(row)
-
-    for row in seeder.frames['ufcstats_events.csv'].itertuples(index=False):
-        ufcstats_event_id = clean_text(row.ufcstats_event_id)
+    for row in seeder.frames['ufcstats_events_2025.csv'].itertuples(index=False):
+        ufcstats_event_id = clean_text(row.event_id)
         if ufcstats_event_id is None:
             continue
 
-        tapology_event_id = ufc_to_tapology_event.get(ufcstats_event_id)
-        key = (
-            f'tap:{tapology_event_id}'
-            if tapology_event_id is not None and f'tap:{tapology_event_id}' in events_by_key
-            else None
-        )
-        if key is None:
-            key = f'ufc:{ufcstats_event_id}'
+        event_date = parse_date_value(clean_text(row.date)) or date(1900, 1, 1)
+        if event_date > analysis_cutoff_date:
+            continue
 
-        extra = ufcstats_event_extras.get(ufcstats_event_id, {})
         candidate = {
-            'event_date': parse_date_value(clean_text(row.event_date)),
-            'event_name': clean_text(row.event_name) or 'Unknown Event',
+            'event_date': event_date,
+            'event_name': clean_text(row.name) or f'UFCStats Event {ufcstats_event_id}',
             'ufcstats_event_id': ufcstats_event_id,
-            'ufcstats_event_url': clean_text(extra.get('url')) or clean_text(row.ufcstats_event_url),
-            'ufcstats_event_uuid': parse_uuid_value(clean_text(extra.get('uuid'))),
-            'num_fights': parse_int(clean_text(extra.get('num_fights'))),
+            'ufcstats_event_url': clean_text(row.url),
+            'ufcstats_event_uuid': parse_uuid_value(clean_text(row.uuid)),
+            'num_fights': parse_int(clean_text(row.num_fights)),
             'location': clean_text(row.location),
-            'fetched_at': parse_datetime_value(clean_text(row.fetched_at)),
+            'fetched_at': None,
+            'source_file': 'ufcstats_events_2025.csv',
         }
-        events_by_key[key] = merge_event_record(events_by_key.get(key, {}), candidate)
+        ufcstats_events[ufcstats_event_id] = merge_record(ufcstats_events.get(ufcstats_event_id, {}), candidate)
 
-    rows_to_insert = []
-    for key, record in events_by_key.items():
-        event_date = record.get('event_date') or parse_date_value(record.get('event_date_raw')) or None
-        event_name = record.get('event_name') or f'Unknown Event {key}'
-        record['event_date'] = event_date or date(1900, 1, 1)
-        record['event_name'] = event_name
-        rows_to_insert.append(record)
+    def register_tapology_event(row_data: dict[str, Any], source_file: str) -> None:
+        tapology_event_slug = clean_text(row_data.get('event_tapology_slug')) or parse_tapology_slug_from_url(
+            clean_text(row_data.get('event_tapology_url'))
+        )
+        if tapology_event_slug is None:
+            tapology_event_slug = clean_text(row_data.get('event_tapology_id'))
+        if tapology_event_slug is None:
+            return
+        candidate = {
+            'tapology_event_slug': tapology_event_slug,
+            'event_date': parse_date_value(clean_text(row_data.get('event_date')))
+            or parse_date_value(clean_text(row_data.get('event_date_raw')))
+            or date(1900, 1, 1),
+            'event_date_raw': clean_text(row_data.get('event_date_raw')),
+            'event_name': clean_text(row_data.get('event_name')) or f'Tapology Event {tapology_event_slug}',
+            'tapology_event_url': clean_text(row_data.get('event_tapology_url')),
+            'promotion_tapology_slug': parse_tapology_slug_from_url(clean_text(row_data.get('promotion_tapology_url'))),
+            'promotion_name': clean_text(row_data.get('promotion_name')),
+            'source_file': source_file,
+        }
+        tapology_events[tapology_event_slug] = merge_record(tapology_events.get(tapology_event_slug, {}), candidate)
 
-    seeder.bulk_insert(conn, db_schema.fact_event_table, rows_to_insert)
+    for row in seeder.frames['tapology_events.csv'].to_dict('records'):
+        register_tapology_event(row, 'tapology_events.csv')
+    for row in seeder.frames['tapology_bouts.csv'].to_dict('records'):
+        register_tapology_event(row, 'tapology_bouts.csv')
 
-    event_results = conn.execute(
+    seeder.bulk_insert(conn, db_schema.fact_event_ufcstats_table, list(ufcstats_events.values()))
+    seeder.bulk_insert(conn, db_schema.fact_event_tapology_table, list(tapology_events.values()))
+
+    ufcstats_source_rows = conn.execute(
         select(
-            db_schema.fact_event_table.c.event_id,
-            db_schema.fact_event_table.c.tapology_event_id,
-            db_schema.fact_event_table.c.ufcstats_event_id,
+            db_schema.fact_event_ufcstats_table.c.ufcstats_event_fact_id,
+            db_schema.fact_event_ufcstats_table.c.ufcstats_event_id,
         )
     ).all()
+    ufcstats_fact_id_by_source: dict[str, object] = {}
+    for row in ufcstats_source_rows:
+        ufcstats_fact_id_by_source[str(row.ufcstats_event_id)] = row.ufcstats_event_fact_id
+
+    tapology_source_rows = conn.execute(
+        select(
+            db_schema.fact_event_tapology_table.c.tapology_event_fact_id,
+            db_schema.fact_event_tapology_table.c.tapology_event_slug,
+        )
+    ).all()
+    tapology_fact_id_by_source: dict[str, object] = {}
+    for row in tapology_source_rows:
+        tapology_fact_id_by_source[str(row.tapology_event_slug)] = row.tapology_event_fact_id
+
+    checkpoint_rows = [
+        {
+            'event_date': event['event_date'],
+            'event_name': event['event_name'],
+            'ufcstats_event_id': event['ufcstats_event_id'],
+            'ufcstats_event_url': event.get('ufcstats_event_url'),
+            'ufcstats_event_uuid': event.get('ufcstats_event_uuid'),
+            'num_fights': event.get('num_fights'),
+            'location': event.get('location'),
+            'fetched_at': event.get('fetched_at'),
+            'source_file': event.get('source_file'),
+        }
+        for event in ufcstats_events.values()
+    ]
+    seeder.bulk_insert(conn, db_schema.fact_event_table, checkpoint_rows)
+
+    event_results = conn.execute(
+        select(db_schema.fact_event_table.c.event_id, db_schema.fact_event_table.c.ufcstats_event_id)
+    ).all()
     for row in event_results:
-        if row.tapology_event_id is not None:
-            seeder.event_id_by_tapology[int(row.tapology_event_id)] = row.event_id
         if row.ufcstats_event_id is not None:
             seeder.event_id_by_ufcstats[str(row.ufcstats_event_id)] = row.event_id
+
+    event_bridge_map = build_ufc_to_tapology_event_map(seeder, set(ufcstats_events))
+    bridge_rows = []
+    for ufcstats_event_id, mapping in event_bridge_map.items():
+        checkpoint_event_id = seeder.event_id_by_ufcstats.get(ufcstats_event_id)
+        if checkpoint_event_id is None:
+            continue
+        tapology_event_slug = str(mapping['tapology_event_slug'])
+        seeder.event_id_by_tapology[tapology_event_slug] = checkpoint_event_id
+        bridge_rows.append(
+            {
+                'ufcstats_event_id': ufcstats_event_id,
+                'tapology_event_slug': tapology_event_slug,
+                'ufcstats_event_fact_id': ufcstats_fact_id_by_source.get(ufcstats_event_id),
+                'tapology_event_fact_id': tapology_fact_id_by_source.get(tapology_event_slug),
+                'checkpoint_event_id': checkpoint_event_id,
+                'mapped_bout_count': int(mapping['mapped_bout_count']),
+                'confidence': mapping['confidence'],
+                'source_file': 'bout_id_map.csv',
+            }
+        )
+    seeder.bulk_insert(conn, db_schema.bridge_event_source_table, bridge_rows)
+
+
+def build_ufc_checkpoint_schedule(conn: Connection) -> list[tuple[date, object]]:
+    rows = conn.execute(
+        select(db_schema.fact_event_table.c.event_id, db_schema.fact_event_table.c.event_date)
+        .where(db_schema.fact_event_table.c.ufcstats_event_id.is_not(None))
+        .order_by(db_schema.fact_event_table.c.event_date, db_schema.fact_event_table.c.event_id)
+    ).all()
+    return [(row.event_date, row.event_id) for row in rows]
+
+
+def resolve_next_checkpoint_event_id(
+    checkpoint_schedule: list[tuple[date, object]], bout_date: date | None
+) -> object | None:
+    if not checkpoint_schedule:
+        return None
+    if bout_date is None:
+        return checkpoint_schedule[-1][1]
+    for checkpoint_date, checkpoint_event_id in checkpoint_schedule:
+        if bout_date <= checkpoint_date:
+            return checkpoint_event_id
+    return checkpoint_schedule[-1][1]
 
 
 def seed_bouts(seeder: NormalizedCsvSeeder, conn: Connection) -> None:  # noqa: PLR0912, PLR0915
     records_by_key: dict[str, dict] = {}
-    tapology_bout_by_ufcstats: dict[str, int] = {}
+    tapology_bout_by_ufcstats: dict[str, str] = {}
+    checkpoint_schedule = build_ufc_checkpoint_schedule(conn)
 
     for row in seeder.frames['bout_id_map.csv'].itertuples(index=False):
         ufcstats_fight_id = clean_text(row.ufcstats_fight_id)
-        tapology_bout_id = parse_int(clean_text(row.tapology_bout_id))
-        if ufcstats_fight_id and tapology_bout_id is not None:
-            tapology_bout_by_ufcstats[ufcstats_fight_id] = tapology_bout_id
+        tapology_bout_ref = clean_text(row.tapology_bout_id)
+        if ufcstats_fight_id and tapology_bout_ref is not None:
+            tapology_bout_by_ufcstats[ufcstats_fight_id] = tapology_bout_ref
 
     ruleset_round_seconds: dict[object, int] = {}
     ruleset_rows = conn.execute(
@@ -374,17 +457,15 @@ def seed_bouts(seeder: NormalizedCsvSeeder, conn: Connection) -> None:  # noqa: 
         ruleset_round_seconds[row.ruleset_id] = int(row.round_seconds)
 
     for row in seeder.frames['tapology_bouts.csv'].itertuples(index=False):
-        tapology_bout_id = parse_int(clean_text(row.tapology_bout_id))
-        if tapology_bout_id is None:
+        tapology_bout_ref = clean_text(row.tapology_bout_id)
+        if tapology_bout_ref is None:
             continue
-        key = f'tap:{tapology_bout_id}'
+        key = f'tap:{tapology_bout_ref}'
 
         event_date = parse_date_value(clean_text(row.event_date)) or parse_date_value(clean_text(row.event_date_raw))
-        event_name = clean_text(row.event_name) or f'Tapology Bout {tapology_bout_id}'
-        event_tapology_id = parse_int(clean_text(row.event_tapology_id))
-        event_id = seeder.event_id_by_tapology.get(event_tapology_id) if event_tapology_id is not None else None
+        event_id = resolve_next_checkpoint_event_id(checkpoint_schedule, event_date)
         if event_id is None:
-            event_id = seeder.create_synthetic_event(conn, event_date, event_name)
+            continue
 
         sport_key = normalize_sport_type(clean_text(row.sport)).value
         is_title_fight = parse_bool_text(clean_text(row.is_title_fight)) or False
@@ -440,7 +521,7 @@ def seed_bouts(seeder: NormalizedCsvSeeder, conn: Connection) -> None:  # noqa: 
             'is_amateur': is_amateur,
             'is_title_fight': is_title_fight,
             'scheduled_rounds': scheduled_rounds,
-            'tapology_bout_id': tapology_bout_id,
+            'tapology_bout_ref': tapology_bout_ref,
             'ufcstats_fight_id': None,
             'winner_fighter_id': None,
             'referee': None,
@@ -455,8 +536,12 @@ def seed_bouts(seeder: NormalizedCsvSeeder, conn: Connection) -> None:  # noqa: 
             'fetched_at': None,
             'source_file': 'tapology_bouts.csv',
             'source_meta_json': {
+                'tapology_event_name': clean_text(row.event_name),
+                'tapology_event_date': event_date.isoformat() if event_date is not None else None,
+                'tapology_event_slug': clean_text(getattr(row, 'event_tapology_slug', None))
+                or parse_tapology_slug_from_url(clean_text(row.event_tapology_url)),
                 'promotion_name': clean_text(row.promotion_name),
-                'promotion_tapology_id': parse_int(clean_text(row.promotion_tapology_id)),
+                'promotion_tapology_slug': parse_tapology_slug_from_url(clean_text(row.promotion_tapology_url)),
             },
         }
 
@@ -465,10 +550,10 @@ def seed_bouts(seeder: NormalizedCsvSeeder, conn: Connection) -> None:  # noqa: 
         if ufcstats_fight_id is None:
             continue
 
-        mapped_tapology_bout_id = tapology_bout_by_ufcstats.get(ufcstats_fight_id)
+        mapped_tapology_bout_ref = tapology_bout_by_ufcstats.get(ufcstats_fight_id)
         key = (
-            f'tap:{mapped_tapology_bout_id}'
-            if mapped_tapology_bout_id and f'tap:{mapped_tapology_bout_id}' in records_by_key
+            f'tap:{mapped_tapology_bout_ref}'
+            if mapped_tapology_bout_ref and f'tap:{mapped_tapology_bout_ref}' in records_by_key
             else None
         )
         if key is None:
@@ -477,7 +562,7 @@ def seed_bouts(seeder: NormalizedCsvSeeder, conn: Connection) -> None:  # noqa: 
         record = records_by_key.get(key, {})
         event_id = seeder.event_id_by_ufcstats.get(clean_text(row.ufcstats_event_id) or '')
         if event_id is None:
-            event_id = seeder.create_synthetic_event(conn, None, f'UFCStats Fight {ufcstats_fight_id}')
+            continue
 
         scheduled_rounds = parse_int(clean_text(row.scheduled_rounds))
         is_title_fight = parse_bool_text(clean_text(row.is_title_bout)) or False
@@ -533,7 +618,7 @@ def seed_bouts(seeder: NormalizedCsvSeeder, conn: Connection) -> None:  # noqa: 
                 'is_openweight': parsed_weight.is_openweight or record.get('is_openweight', False),
                 'is_title_fight': is_title_fight,
                 'scheduled_rounds': scheduled_rounds,
-                'tapology_bout_id': mapped_tapology_bout_id or record.get('tapology_bout_id'),
+                'tapology_bout_ref': mapped_tapology_bout_ref or record.get('tapology_bout_ref'),
                 'ufcstats_fight_id': ufcstats_fight_id,
                 'winner_fighter_id': seeder.fighter_id_by_ufcstats.get(clean_text(row.winner_fighter_id) or ''),
                 'referee': clean_text(row.referee),
@@ -562,9 +647,9 @@ def seed_bouts(seeder: NormalizedCsvSeeder, conn: Connection) -> None:  # noqa: 
 
     rows_to_insert = []
     sport_key_by_id = {sport_id: sport_key for sport_key, sport_id in seeder.sport_id_by_key.items()}
-    for key, record in records_by_key.items():
+    for _key, record in records_by_key.items():
         if record.get('event_id') is None:
-            record['event_id'] = seeder.create_synthetic_event(conn, None, f'Unknown Event for {key}')
+            continue
         if record.get('sport_id') is None:
             record['sport_id'] = seeder.sport_id_by_key['mma']
         sport_key = sport_key_by_id.get(record['sport_id'], 'mma')
@@ -578,12 +663,30 @@ def seed_bouts(seeder: NormalizedCsvSeeder, conn: Connection) -> None:  # noqa: 
             record['weight_lbs'] = record['catch_weight_lbs']
         rows_to_insert.append(record)
 
+    expected_ufc_fight_ids = {
+        clean_text(row.ufcstats_fight_id)
+        for row in seeder.frames['ufcstats_fights.csv'].itertuples(index=False)
+        if clean_text(row.ufcstats_fight_id) is not None
+        and clean_text(row.ufcstats_event_id) in seeder.event_id_by_ufcstats
+    }
+    mapped_ufc_fight_ids = {
+        str(record['ufcstats_fight_id'])
+        for record in rows_to_insert
+        if record.get('ufcstats_fight_id') is not None and record.get('tapology_bout_ref') is not None
+    }
+    missing_bout_crosswalk = sorted(expected_ufc_fight_ids - mapped_ufc_fight_ids)
+    if missing_bout_crosswalk:
+        sample = ', '.join(missing_bout_crosswalk[:10])
+        raise ValueError(
+            f'Missing tapology bout crosswalk for {len(missing_bout_crosswalk)} UFCStats fights. Sample: {sample}'
+        )
+
     seeder.bulk_insert(conn, db_schema.fact_bout_table, rows_to_insert)
 
     bout_rows = conn.execute(
         select(
             db_schema.fact_bout_table.c.bout_id,
-            db_schema.fact_bout_table.c.tapology_bout_id,
+            db_schema.fact_bout_table.c.tapology_bout_ref,
             db_schema.fact_bout_table.c.ufcstats_fight_id,
             db_schema.fact_bout_table.c.method_group,
             db_schema.fact_bout_table.c.decision_type,
@@ -591,8 +694,8 @@ def seed_bouts(seeder: NormalizedCsvSeeder, conn: Connection) -> None:  # noqa: 
     ).all()
 
     for row in bout_rows:
-        if row.tapology_bout_id is not None:
-            seeder.bout_id_by_tapology[int(row.tapology_bout_id)] = row.bout_id
+        if row.tapology_bout_ref is not None:
+            seeder.bout_id_by_tapology[str(row.tapology_bout_ref)] = row.bout_id
         if row.ufcstats_fight_id is not None:
             seeder.bout_id_by_ufcstats[str(row.ufcstats_fight_id)] = row.bout_id
         method_group = row.method_group if isinstance(row.method_group, MethodGroupEnum) else MethodGroupEnum.UNKNOWN
