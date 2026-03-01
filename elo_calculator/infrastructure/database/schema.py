@@ -48,11 +48,17 @@ dim_promotion_table = Table(
     metadata,
     Column('promotion_id', UUID(as_uuid=True), primary_key=True, server_default=text('gen_random_uuid()')),
     Column('promotion_name', Text, nullable=False),
-    Column('tapology_promotion_id', BigInteger, unique=True, index=True),
+    Column('tapology_promotion_id', BigInteger, index=True),
     Column('tapology_promotion_url', Text),
     Column('tapology_slug', String(255)),
     Column('strength', Numeric(6, 4)),
     Column('sport_id', UUID(as_uuid=True), ForeignKey('dim_sport.sport_id')),
+)
+Index(
+    'ux_dim_promotion_tapology_slug',
+    dim_promotion_table.c.tapology_slug,
+    unique=True,
+    postgresql_where=dim_promotion_table.c.tapology_slug.is_not(None),
 )
 
 dim_division_table = Table(
@@ -194,6 +200,59 @@ Index(
 # 2.2 Canonical Events/Bouts/Rounds
 # ---------------------------------
 
+fact_event_ufcstats_table = Table(
+    'fact_event_ufcstats',
+    metadata,
+    Column('ufcstats_event_fact_id', UUID(as_uuid=True), primary_key=True, server_default=text('gen_random_uuid()')),
+    Column('ufcstats_event_id', String(16), nullable=False, index=True),
+    Column('event_date', Date, nullable=False, index=True),
+    Column('event_name', Text, nullable=False),
+    Column('ufcstats_event_url', Text),
+    Column('ufcstats_event_uuid', UUID(as_uuid=True)),
+    Column('num_fights', SmallInteger),
+    Column('location', Text),
+    Column('fetched_at', DateTime(timezone=True)),
+    Column('source_file', Text),
+    Column('created_at', DateTime(timezone=True), nullable=False, server_default=text('now()')),
+)
+
+Index('ux_fact_event_ufcstats_source_event_id', fact_event_ufcstats_table.c.ufcstats_event_id, unique=True)
+Index('ix_fact_event_ufcstats_date', fact_event_ufcstats_table.c.event_date)
+
+fact_event_tapology_table = Table(
+    'fact_event_tapology',
+    metadata,
+    Column('tapology_event_fact_id', UUID(as_uuid=True), primary_key=True, server_default=text('gen_random_uuid()')),
+    Column('tapology_event_slug', String(255), nullable=False, index=True),
+    Column('event_date', Date, nullable=False, index=True),
+    Column('event_date_raw', Text),
+    Column('event_name', Text, nullable=False),
+    Column('tapology_event_url', Text),
+    Column('promotion_tapology_slug', String(255)),
+    Column('promotion_name', Text),
+    Column('source_file', Text),
+    Column('created_at', DateTime(timezone=True), nullable=False, server_default=text('now()')),
+)
+
+Index('ux_fact_event_tapology_source_event_slug', fact_event_tapology_table.c.tapology_event_slug, unique=True)
+Index('ix_fact_event_tapology_date', fact_event_tapology_table.c.event_date)
+
+bridge_event_source_table = Table(
+    'bridge_event_source',
+    metadata,
+    Column('ufcstats_event_id', String(16), primary_key=True),
+    Column('tapology_event_slug', String(255), nullable=False),
+    Column('ufcstats_event_fact_id', UUID(as_uuid=True), ForeignKey('fact_event_ufcstats.ufcstats_event_fact_id')),
+    Column('tapology_event_fact_id', UUID(as_uuid=True), ForeignKey('fact_event_tapology.tapology_event_fact_id')),
+    Column('checkpoint_event_id', UUID(as_uuid=True), ForeignKey('fact_event.event_id')),
+    Column('mapped_bout_count', Integer, nullable=False, server_default=text('0')),
+    Column('confidence', Numeric(6, 4), nullable=False, server_default=text('0.0')),
+    Column('source_file', Text),
+    Column('created_at', DateTime(timezone=True), nullable=False, server_default=text('now()')),
+)
+
+Index('ux_bridge_event_source_tapology_event_slug', bridge_event_source_table.c.tapology_event_slug, unique=True)
+
 fact_event_table = Table(
     'fact_event',
     metadata,
@@ -202,7 +261,7 @@ fact_event_table = Table(
     Column('event_date_raw', Text),
     Column('event_name', Text, nullable=False),
     Column('promotion_id', UUID(as_uuid=True), ForeignKey('dim_promotion.promotion_id')),
-    Column('tapology_event_id', BigInteger),
+    Column('tapology_event_slug', String(255)),
     Column('tapology_event_url', Text),
     Column('ufcstats_event_id', String(16)),
     Column('ufcstats_event_url', Text),
@@ -216,10 +275,10 @@ fact_event_table = Table(
 
 Index('ix_event_promo_date', fact_event_table.c.promotion_id, fact_event_table.c.event_date)
 Index(
-    'ux_fact_event_tapology_event_id',
-    fact_event_table.c.tapology_event_id,
+    'ux_fact_event_tapology_event_slug',
+    fact_event_table.c.tapology_event_slug,
     unique=True,
-    postgresql_where=fact_event_table.c.tapology_event_id.is_not(None),
+    postgresql_where=fact_event_table.c.tapology_event_slug.is_not(None),
 )
 Index(
     'ux_fact_event_ufcstats_event_id',
@@ -247,7 +306,7 @@ fact_bout_table = Table(
     Column('is_amateur', Boolean, nullable=False, server_default=text('false')),
     Column('is_title_fight', Boolean, nullable=False, server_default=text('false')),
     Column('scheduled_rounds', SmallInteger),
-    Column('tapology_bout_id', BigInteger, index=True),
+    Column('tapology_bout_ref', String(64), index=True),
     Column('ufcstats_fight_id', String(16), index=True),
     Column('winner_fighter_id', UUID(as_uuid=True), ForeignKey('dim_fighter.fighter_id')),
     Column('referee', Text),
@@ -267,10 +326,10 @@ fact_bout_table = Table(
 
 Index('ix_bout_sport_date', fact_bout_table.c.sport_id, fact_bout_table.c.event_id)
 Index(
-    'ux_fact_bout_tapology_bout_id',
-    fact_bout_table.c.tapology_bout_id,
+    'ux_fact_bout_tapology_bout_ref',
+    fact_bout_table.c.tapology_bout_ref,
     unique=True,
-    postgresql_where=fact_bout_table.c.tapology_bout_id.is_not(None),
+    postgresql_where=fact_bout_table.c.tapology_bout_ref.is_not(None),
 )
 Index(
     'ux_fact_bout_ufcstats_fight_id',
@@ -587,6 +646,9 @@ CANONICAL_TABLES = (
     dim_result_ontology_table,
     dim_fighter_table,
     bridge_fighter_source_table,
+    fact_event_ufcstats_table,
+    fact_event_tapology_table,
+    bridge_event_source_table,
     fact_event_table,
     fact_bout_table,
     fact_bout_participant_table,

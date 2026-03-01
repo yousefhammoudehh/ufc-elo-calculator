@@ -14,7 +14,13 @@ from elo_calculator.domain.shared.enumerations import (
 )
 from elo_calculator.infrastructure.database import schema as db_schema
 from seeder_data.normalized_seed.constants import MMA_DIVISION_BOUNDS_LBS, MMA_DIVISION_LIMITS_LBS
-from seeder_data.normalized_seed.helpers import clean_text, parse_decimal, parse_int, parse_uuid_value
+from seeder_data.normalized_seed.helpers import (
+    clean_text,
+    parse_decimal,
+    parse_int,
+    parse_tapology_slug_from_url,
+    parse_uuid_value,
+)
 from seeder_data.normalized_seed.normalizers import infer_ruleset, parse_weight_class
 
 if TYPE_CHECKING:
@@ -54,9 +60,9 @@ def seed_sports(seeder: NormalizedCsvSeeder, conn: Connection) -> None:
 def seed_promotions(seeder: NormalizedCsvSeeder, conn: Connection) -> None:
     promotions: dict[str, dict] = {}
 
-    def resolve_key(raw_tapology_id: int | None, raw_name: str | None) -> str | None:
-        if raw_tapology_id is not None:
-            return f'tap:{raw_tapology_id}'
+    def resolve_key(raw_tapology_slug: str | None, raw_name: str | None) -> str | None:
+        if raw_tapology_slug is not None:
+            return f'slug:{raw_tapology_slug}'
         name = clean_text(raw_name)
         if name is None:
             return None
@@ -78,11 +84,12 @@ def seed_promotions(seeder: NormalizedCsvSeeder, conn: Connection) -> None:
         # Stable fallback keeps promotion IDs deterministic even when legacy IDs are malformed.
         return source_uuid or str(uuid5(NAMESPACE_URL, f'promotion:{key}'))
 
-    allowed_tapology_ids: set[int] = set()
+    allowed_tapology_slugs: set[str] = set()
 
     for row in seeder.frames['promotions_with_sports.csv'].itertuples(index=False):
+        tapology_slug = clean_text(row.tapology_slug)
         tapology_id = parse_int(clean_text(row.tapology_promotion_id))
-        key = resolve_key(tapology_id, clean_text(row.name))
+        key = resolve_key(tapology_slug, clean_text(row.name))
         if key is None:
             continue
 
@@ -92,8 +99,8 @@ def seed_promotions(seeder: NormalizedCsvSeeder, conn: Connection) -> None:
         if strength is None or sport_id is None:
             continue
 
-        if tapology_id is not None:
-            allowed_tapology_ids.add(tapology_id)
+        if tapology_slug is not None:
+            allowed_tapology_slugs.add(tapology_slug)
 
         source_uuid = parse_uuid_value(clean_text(row.id))
         candidate = {
@@ -105,7 +112,7 @@ def seed_promotions(seeder: NormalizedCsvSeeder, conn: Connection) -> None:
                 if clean_text(row.tapology_slug)
                 else None
             ),
-            'tapology_slug': clean_text(row.tapology_slug),
+            'tapology_slug': tapology_slug,
             'strength': strength,
             'sport_id': sport_id,
         }
@@ -114,16 +121,17 @@ def seed_promotions(seeder: NormalizedCsvSeeder, conn: Connection) -> None:
     for file_name in ('tapology_events.csv', 'tapology_bouts.csv'):
         frame = seeder.frames[file_name]
         for row in frame.itertuples(index=False):
-            tapology_id = parse_int(clean_text(row.promotion_tapology_id))
-            if tapology_id is None or tapology_id not in allowed_tapology_ids:
+            promotion_slug = parse_tapology_slug_from_url(clean_text(row.promotion_tapology_url))
+            if promotion_slug is None or promotion_slug not in allowed_tapology_slugs:
                 continue
-            key = resolve_key(tapology_id, clean_text(row.promotion_name))
+            key = resolve_key(promotion_slug, clean_text(row.promotion_name))
             if key is None:
                 continue
             candidate = {
                 'promotion_name': clean_text(row.promotion_name) or 'Unknown Promotion',
-                'tapology_promotion_id': tapology_id,
+                'tapology_promotion_id': parse_int(clean_text(row.promotion_tapology_id)),
                 'tapology_promotion_url': clean_text(row.promotion_tapology_url),
+                'tapology_slug': promotion_slug,
             }
             promotions[key] = merge_record(promotions.get(key, {}), candidate)
 
@@ -132,14 +140,14 @@ def seed_promotions(seeder: NormalizedCsvSeeder, conn: Connection) -> None:
     results = conn.execute(
         select(
             db_schema.dim_promotion_table.c.promotion_id,
-            db_schema.dim_promotion_table.c.tapology_promotion_id,
+            db_schema.dim_promotion_table.c.tapology_slug,
             db_schema.dim_promotion_table.c.promotion_name,
         )
     ).all()
 
     for row in results:
-        if row.tapology_promotion_id is not None:
-            seeder.promotion_id_by_tapology_id[int(row.tapology_promotion_id)] = row.promotion_id
+        if row.tapology_slug:
+            seeder.promotion_id_by_tapology_slug[str(row.tapology_slug)] = row.promotion_id
         if row.promotion_name:
             seeder.promotion_id_by_name[row.promotion_name.strip().lower()] = row.promotion_id
 
@@ -294,10 +302,8 @@ def seed_weight_taxonomy(seeder: NormalizedCsvSeeder, conn: Connection) -> None:
 
     for row in seeder.frames['tapology_bouts.csv'].itertuples(index=False):
         sport_key = normalize_sport_type(clean_text(row.sport)).value
-        promotion_tapology_id = parse_int(clean_text(row.promotion_tapology_id))
-        promotion_id = (
-            seeder.promotion_id_by_tapology_id.get(promotion_tapology_id) if promotion_tapology_id is not None else None
-        )
+        promotion_slug = parse_tapology_slug_from_url(clean_text(row.promotion_tapology_url))
+        promotion_id = seeder.promotion_id_by_tapology_slug.get(promotion_slug or '')
         register_raw_weight_class(
             source_key='tapology',
             sport_key=sport_key,

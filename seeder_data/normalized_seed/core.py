@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import date
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -23,6 +22,7 @@ from seeder_data.normalized_seed.step_dimensions import (
     seed_weight_taxonomy,
 )
 from seeder_data.normalized_seed.step_entities import seed_bouts, seed_events, seed_fighters
+from seeder_data.normalized_seed.step_ranking import seed_ranking_artifacts
 from seeder_data.normalized_seed.step_results import seed_participants, seed_result_ontology
 from seeder_data.normalized_seed.step_stats import seed_round_and_stats, seed_watermark
 
@@ -32,7 +32,7 @@ class NormalizedCsvSeeder:
         self.data_dir = data_dir
         self.frames: dict[str, pd.DataFrame] = {}
         self.sport_id_by_key: dict[str, Any] = {}
-        self.promotion_id_by_tapology_id: dict[int, Any] = {}
+        self.promotion_id_by_tapology_slug: dict[str, Any] = {}
         self.promotion_id_by_name: dict[str, Any] = {}
         self.division_id_by_key: dict[tuple[str, str, FighterGenderEnum], Any] = {}
         self.weight_limit_id_by_key: dict[tuple[WeightUnitEnum, Decimal], Any] = {}
@@ -42,12 +42,11 @@ class NormalizedCsvSeeder:
         self.fighter_id_by_ufcstats: dict[str, Any] = {}
         self.fighter_name_by_tapology: dict[str, str] = {}
         self.fighter_name_by_ufcstats: dict[str, str] = {}
-        self.event_id_by_tapology: dict[int, Any] = {}
+        self.event_id_by_tapology: dict[str, Any] = {}
         self.event_id_by_ufcstats: dict[str, Any] = {}
-        self.bout_id_by_tapology: dict[int, Any] = {}
+        self.bout_id_by_tapology: dict[str, Any] = {}
         self.bout_id_by_ufcstats: dict[str, Any] = {}
         self.bout_method_by_bout_id: dict[Any, tuple[MethodGroupEnum, DecisionTypeEnum]] = {}
-        self._synthetic_event_counter = 0
 
     def load(self) -> None:
         file_names = (
@@ -56,7 +55,6 @@ class NormalizedCsvSeeder:
             'tapology_bouts.csv',
             'tapology_bout_fighters.csv',
             'ufcstats_fighters.csv',
-            'ufcstats_events.csv',
             'ufcstats_events_2025.csv',
             'ufcstats_fights.csv',
             'ufcstats_fight_totals.csv',
@@ -86,7 +84,6 @@ class NormalizedCsvSeeder:
             frame[id_col] = [resolve_ufcstats_id(raw_id, None) or '' for raw_id in frame[id_col]]
 
         apply_with_url('ufcstats_fighters.csv', 'ufcstats_fighter_id', 'ufcstats_url')
-        apply_with_url('ufcstats_events.csv', 'ufcstats_event_id', 'ufcstats_event_url')
         apply_with_url('ufcstats_events_2025.csv', 'event_id', 'url')
         apply_with_url('ufcstats_fights.csv', 'ufcstats_fight_id', 'ufcstats_fight_url')
 
@@ -134,16 +131,6 @@ class NormalizedCsvSeeder:
             return None
         return self.weight_limit_id_by_key.get((unit, value.quantize(Decimal('0.01'))))
 
-    def create_synthetic_event(self, conn: Connection, event_date: date | None, event_name: str | None) -> Any:
-        self._synthetic_event_counter += 1
-        safe_date = event_date or date(1900, 1, 1)
-        safe_name = event_name or f'Synthetic Event {self._synthetic_event_counter}'
-        result = conn.execute(
-            db_schema.fact_event_table.insert().returning(db_schema.fact_event_table.c.event_id),
-            [{'event_date': safe_date, 'event_name': safe_name, 'source_file': 'synthetic'}],
-        )
-        return result.scalar_one()
-
     def run(self, conn: Connection) -> None:
         self.load()
         seed_sports(self, conn)
@@ -156,4 +143,5 @@ class NormalizedCsvSeeder:
         seed_result_ontology(self, conn)
         seed_participants(self, conn)
         seed_round_and_stats(self, conn)
+        seed_ranking_artifacts(self, conn)
         seed_watermark(self, conn)
