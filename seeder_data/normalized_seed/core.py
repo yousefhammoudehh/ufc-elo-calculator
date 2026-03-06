@@ -22,7 +22,6 @@ from seeder_data.normalized_seed.step_dimensions import (
     seed_weight_taxonomy,
 )
 from seeder_data.normalized_seed.step_entities import seed_bouts, seed_events, seed_fighters
-from seeder_data.normalized_seed.step_ranking import seed_ranking_artifacts
 from seeder_data.normalized_seed.step_results import seed_participants, seed_result_ontology
 from seeder_data.normalized_seed.step_stats import seed_round_and_stats, seed_watermark
 
@@ -143,5 +142,4 @@ class NormalizedCsvSeeder:
         seed_result_ontology(self, conn)
         seed_participants(self, conn)
         seed_round_and_stats(self, conn)
-        seed_ranking_artifacts(self, conn)
         seed_watermark(self, conn)
