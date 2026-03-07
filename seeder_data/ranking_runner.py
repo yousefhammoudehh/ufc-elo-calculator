@@ -40,6 +40,7 @@ from elo_calculator.application.ranking import (
     new_glicko2_state,
     new_unified_state,
 )
+from elo_calculator.application.ranking.system_g_goat_pipeline import compute_and_ingest_goat
 from elo_calculator.infrastructure.database import schema as db_schema
 from elo_calculator.infrastructure.database.engine import metadata
 
@@ -123,7 +124,7 @@ def _parse_args() -> argparse.Namespace:
 # Core pipeline
 # ---------------------------------------------------------------------------
 def run_rankings(conn: Connection, *, truncate: bool = True) -> None:
-    """Execute the full rating pipeline: PS → systems A-F → snapshots."""
+    """Execute the full rating pipeline: PS → systems A-F → GOAT (G) → snapshots."""
     if truncate:
         _reset_computed_artifacts(conn)
     _ensure_snapshot_default_partition(conn)
@@ -143,6 +144,10 @@ def run_rankings(conn: Connection, *, truncate: bool = True) -> None:
     final_date = max((c.checkpoint_date for c in contexts), default=date(1900, 1, 1))
     logger.info('Running rating systems (final date = {}) …', final_date)
     _run_all_systems(conn, contexts, bout_pairs, ps_artifacts, system_ids, final_date)
+
+    # --- System G: GOAT composite (post-hoc, reads Systems A-F outputs) ---
+    logger.info('Computing System G (GOAT composite) …')
+    compute_and_ingest_goat(conn)
 
     logger.info('Done.')
 
