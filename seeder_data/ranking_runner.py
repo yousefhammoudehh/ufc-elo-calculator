@@ -163,6 +163,10 @@ def run_rankings(conn: Connection, *, truncate: bool = True) -> None:
     logger.info('Computing System G (GOAT composite) …')
     compute_and_ingest_goat(conn)
 
+    # --- Populate serving / API tables ---
+    logger.info('Populating serving tables …')
+    _populate_serving_tables(conn, final_date)
+
     logger.info('Done.')
 
 
@@ -1069,6 +1073,134 @@ def _write_final_snapshots(
     if new_h_perk:
         _bulk_insert(conn, db_schema.fact_ufc5_perk_state_table, new_h_perk)
         logger.info('Wrote {} final System H perk state rows at {}.', len(new_h_perk), final_date)
+
+
+# ---------------------------------------------------------------------------
+# Serving-table materialisation
+# ---------------------------------------------------------------------------
+def _populate_serving_tables(conn: Connection, final_date: date) -> None:
+    """Materialise the three serving tables from fact/dim data."""
+    _populate_serving_timeseries(conn)
+    _populate_serving_current_rankings(conn, final_date)
+    _populate_serving_fighter_profile(conn, final_date)
+
+
+def _populate_serving_timeseries(conn: Connection) -> None:
+    """Copy every snapshot row into ``serving_fighter_timeseries``."""
+    conn.execute(
+        text("""
+            INSERT INTO serving_fighter_timeseries (fighter_id, system_id, date, rating_mean, rd)
+            SELECT fighter_id, system_id, as_of_date, rating_mean, rating_rd
+            FROM fact_rating_snapshot_default
+        """)
+    )
+    cnt = conn.execute(text('SELECT count(*) FROM serving_fighter_timeseries')).scalar_one()
+    logger.info('  serving_fighter_timeseries: {} rows.', cnt)
+
+
+def _populate_serving_current_rankings(conn: Connection, final_date: date) -> None:
+    """Build current rankings from the latest snapshot cross-joined with fighter divisions."""
+    conn.execute(
+        text("""
+            INSERT INTO serving_current_rankings
+                (system_id, sport_id, division_id, as_of_date, fighter_id,
+                 rank, rating_mean, rd, promotion_id_last, last_fight_date)
+            SELECT
+                sub.system_id,
+                sub.sport_id,
+                sub.division_id,
+                sub.as_of_date,
+                sub.fighter_id,
+                sub.rk,
+                sub.rating_mean,
+                sub.rating_rd,
+                sub.promotion_id,
+                sub.last_fight_date
+            FROM (
+                SELECT
+                    rs.system_id,
+                    b.sport_id,
+                    b.division_id,
+                    rs.as_of_date,
+                    rs.fighter_id,
+                    rs.rating_mean,
+                    rs.rating_rd,
+                    row_number() OVER (
+                        PARTITION BY rs.system_id, b.division_id
+                        ORDER BY rs.rating_mean DESC
+                    ) AS rk,
+                    e.promotion_id,
+                    e.event_date AS last_fight_date
+                FROM fact_rating_snapshot_default rs
+                JOIN LATERAL (
+                    SELECT bp.bout_id
+                    FROM fact_bout_participant bp
+                    WHERE bp.fighter_id = rs.fighter_id
+                    LIMIT 1
+                ) latest_part ON true
+                JOIN LATERAL (
+                    SELECT b2.division_id, b2.sport_id, b2.event_id
+                    FROM fact_bout b2
+                    JOIN fact_bout_participant bp2 ON bp2.bout_id = b2.bout_id
+                    WHERE bp2.fighter_id = rs.fighter_id
+                    ORDER BY b2.event_id DESC
+                    LIMIT 1
+                ) b ON true
+                JOIN fact_event e ON e.event_id = b.event_id
+                WHERE rs.as_of_date = :final_date
+                  AND b.division_id IS NOT NULL
+            ) sub
+        """),
+        {'final_date': final_date},
+    )
+    cnt = conn.execute(text('SELECT count(*) FROM serving_current_rankings')).scalar_one()
+    logger.info('  serving_current_rankings: {} rows.', cnt)
+
+
+def _populate_serving_fighter_profile(conn: Connection, final_date: date) -> None:
+    """Build fighter profile rows from latest snapshots and extra_json fields."""
+    conn.execute(
+        text("""
+            INSERT INTO serving_fighter_profile
+                (fighter_id, as_of_date, system_id, rating_mean, rd,
+                 strike, grapple, durability, peak_rating, streaks, sos_metrics)
+            SELECT
+                rs.fighter_id,
+                rs.as_of_date,
+                rs.system_id,
+                rs.rating_mean,
+                rs.rating_rd,
+                CASE WHEN rs.extra_json ? 'striking'
+                      AND jsonb_typeof(rs.extra_json->'striking') = 'number'
+                     THEN (rs.extra_json->>'striking')::numeric(10,4) END,
+                CASE WHEN rs.extra_json ? 'grappling'
+                      AND jsonb_typeof(rs.extra_json->'grappling') = 'number'
+                     THEN (rs.extra_json->>'grappling')::numeric(10,4) END,
+                CASE WHEN rs.extra_json ? 'durability'
+                      AND jsonb_typeof(rs.extra_json->'durability') = 'number'
+                     THEN (rs.extra_json->>'durability')::numeric(10,4) END,
+                GREATEST(
+                    rs.rating_mean,
+                    CASE WHEN rs.extra_json ? 'peak'
+                          AND jsonb_typeof(rs.extra_json->'peak') = 'number'
+                         THEN (rs.extra_json->>'peak')::numeric(10,4)
+                         ELSE rs.rating_mean END
+                ),
+                CASE WHEN rs.extra_json ? 'streak'
+                      AND jsonb_typeof(rs.extra_json->'streak') = 'number'
+                     THEN jsonb_build_object(
+                         'win_streak', (rs.extra_json->>'streak')::int,
+                         'mma_fights', COALESCE((rs.extra_json->>'mma_fights')::int, 0)
+                     )
+                     ELSE '{}'::jsonb END,
+                '{}'::jsonb
+            FROM fact_rating_snapshot_default rs
+            WHERE rs.as_of_date = :final_date
+        """),
+        {'final_date': final_date},
+    )
+    cnt = conn.execute(text('SELECT count(*) FROM serving_fighter_profile')).scalar_one()
+    logger.info('  serving_fighter_profile: {} rows.', cnt)
 
 
 # ---------------------------------------------------------------------------
