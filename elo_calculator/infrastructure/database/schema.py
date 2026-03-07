@@ -636,6 +636,93 @@ pipeline_watermark_table = Table(
     Column('updated_at', DateTime(timezone=True), nullable=False, server_default=text('now()')),
 )
 
+# ---------------------------------
+# 2.8 System H — UFC 5 Stat Builder
+# ---------------------------------
+
+fact_ufc5_stat_snapshot_table = Table(
+    'fact_ufc5_stat_snapshot',
+    metadata,
+    Column('fighter_id', UUID(as_uuid=True), ForeignKey('dim_fighter.fighter_id'), primary_key=True),
+    Column('as_of_date', Date, primary_key=True),
+    # 22 stats on 80-100 scale
+    Column('accuracy', Numeric(6, 2), nullable=False),
+    Column('blocking', Numeric(6, 2), nullable=False),
+    Column('footwork', Numeric(6, 2), nullable=False),
+    Column('head_movement', Numeric(6, 2), nullable=False),
+    Column('kick_power', Numeric(6, 2), nullable=False),
+    Column('kick_speed', Numeric(6, 2), nullable=False),
+    Column('punch_power', Numeric(6, 2), nullable=False),
+    Column('punch_speed', Numeric(6, 2), nullable=False),
+    Column('takedown_defence', Numeric(6, 2), nullable=False),
+    Column('bottom_game', Numeric(6, 2), nullable=False),
+    Column('clinch_grapple', Numeric(6, 2), nullable=False),
+    Column('clinch_striking', Numeric(6, 2), nullable=False),
+    Column('ground_striking', Numeric(6, 2), nullable=False),
+    Column('submission_defence', Numeric(6, 2), nullable=False),
+    Column('submission_offence', Numeric(6, 2), nullable=False),
+    Column('takedowns', Numeric(6, 2), nullable=False),
+    Column('top_game', Numeric(6, 2), nullable=False),
+    Column('body_strength', Numeric(6, 2), nullable=False),
+    Column('cardio', Numeric(6, 2), nullable=False),
+    Column('chin_strength', Numeric(6, 2), nullable=False),
+    Column('legs_strength', Numeric(6, 2), nullable=False),
+    Column('recovery', Numeric(6, 2), nullable=False),
+    # Bucket sub-scores
+    Column('standup_overall', Numeric(6, 2), nullable=False),
+    Column('grappling_overall', Numeric(6, 2), nullable=False),
+    Column('health_overall', Numeric(6, 2), nullable=False),
+    # 3-layer composite
+    Column('base_overall', Numeric(6, 2), nullable=False),
+    Column('synergy_bonus', Numeric(6, 3), nullable=False),
+    Column('perk_bonus', Numeric(6, 3), nullable=False),
+    Column('effective_overall', Numeric(6, 2), nullable=False),
+    # Career accumulators
+    Column('mma_fight_count', Integer, nullable=False, server_default=text('0')),
+    Column('tier_a_fight_count', Integer, nullable=False, server_default=text('0')),
+    Column('total_fights', Integer, nullable=False, server_default=text('0')),
+    # Division snapshot
+    Column('division_id', UUID(as_uuid=True), ForeignKey('dim_division.division_id')),
+)
+
+Index(
+    'ix_ufc5_snapshot_fighter_date',
+    fact_ufc5_stat_snapshot_table.c.fighter_id,
+    fact_ufc5_stat_snapshot_table.c.as_of_date.desc(),
+)
+
+fact_ufc5_perk_state_table = Table(
+    'fact_ufc5_perk_state',
+    metadata,
+    Column('fighter_id', UUID(as_uuid=True), ForeignKey('dim_fighter.fighter_id'), primary_key=True),
+    Column('as_of_date', Date, primary_key=True),
+    Column('perk_key', String(32), primary_key=True),
+    Column('perk_score', Numeric(8, 4), nullable=False),
+    Column('is_active', Boolean, nullable=False, server_default=text('false')),
+    Column('consecutive_above', SmallInteger, nullable=False, server_default=text('0')),
+    Column('consecutive_below', SmallInteger, nullable=False, server_default=text('0')),
+)
+
+Index(
+    'ix_ufc5_perk_fighter_date', fact_ufc5_perk_state_table.c.fighter_id, fact_ufc5_perk_state_table.c.as_of_date.desc()
+)
+
+fact_ufc5_stat_delta_table = Table(
+    'fact_ufc5_stat_delta',
+    metadata,
+    Column('bout_id', UUID(as_uuid=True), ForeignKey('fact_bout.bout_id'), primary_key=True),
+    Column('fighter_id', UUID(as_uuid=True), ForeignKey('dim_fighter.fighter_id'), primary_key=True),
+    Column('pre_overall', Numeric(6, 2), nullable=False),
+    Column('post_overall', Numeric(6, 2), nullable=False),
+    Column('delta_overall', Numeric(6, 3), nullable=False),
+    Column('tier_used', String(1), nullable=False),
+    Column('stat_deltas_json', JSONB, nullable=False, server_default=text("'{}'::jsonb")),
+    Column('perk_deltas_json', JSONB, nullable=False, server_default=text("'{}'::jsonb")),
+    CheckConstraint("tier_used IN ('A', 'B', 'C')", name='ck_fact_ufc5_stat_delta_tier'),
+)
+
+Index('ix_ufc5_delta_fighter', fact_ufc5_stat_delta_table.c.fighter_id, fact_ufc5_stat_delta_table.c.bout_id)
+
 CANONICAL_TABLES = (
     dim_sport_table,
     dim_promotion_table,
@@ -666,6 +753,9 @@ CANONICAL_TABLES = (
     serving_fighter_profile_table,
     serving_fighter_timeseries_table,
     pipeline_watermark_table,
+    fact_ufc5_stat_snapshot_table,
+    fact_ufc5_perk_state_table,
+    fact_ufc5_stat_delta_table,
 )
 
 ALL_TABLES = CANONICAL_TABLES
