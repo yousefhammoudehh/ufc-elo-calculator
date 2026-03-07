@@ -63,6 +63,21 @@ services:
       timeout: 3s
       retries: 3
 
+  ufc-elo-calculator-frontend:
+    build:
+      context: ./frontend
+    container_name: ufc-elo-calculator-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - API_URL=http://ufc-elo-calculator:80
+      - NEXT_TELEMETRY_DISABLED=1
+      - VIRTUAL_HOST=ufc-elo-calculator-frontend.docker
+    depends_on:
+      - ufc-elo-calculator
+    restart: unless-stopped
+
   ufc-elo-calculator-test:
     extends: ufc-elo-calculator-base
     container_name: ufc-elo-calculator-test
