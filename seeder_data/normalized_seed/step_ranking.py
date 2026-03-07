@@ -59,6 +59,7 @@ class _BoutContext:
     finish_time_seconds: int | None
     has_division: bool
     has_promotion: bool
+    division_id: Any | None
 
 
 @dataclass(frozen=True)
@@ -239,6 +240,7 @@ def _load_bout_contexts(conn: Connection) -> list[_BoutContext]:
                 finish_time_seconds=int(row.finish_time_seconds) if row.finish_time_seconds is not None else None,
                 has_division=row.division_id is not None,
                 has_promotion=row.promotion_id is not None,
+                division_id=row.division_id,
             )
         )
     return contexts

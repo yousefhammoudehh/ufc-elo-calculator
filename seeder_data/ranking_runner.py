@@ -25,6 +25,7 @@ from sqlalchemy import Connection, create_engine, delete, select, text
 from elo_calculator.application.ranking import (
     BoutEvidence,
     BoutOutcome,
+    DivisionPercentilePool,
     DynamicFactorBradleyTerrySystem,
     EloPerformanceRatingSystem,
     EvidenceTier,
@@ -34,13 +35,18 @@ from elo_calculator.application.ranking import (
     Glicko2PerformanceRatingSystem,
     StackedLogitMixtureSystem,
     StackingSample,
+    UFC5StatsSystem,
     UnifiedCompositeEloSystem,
+    aggregate_round_stats,
+    extract_bout_features,
     new_dynamic_factor_state,
     new_elo_state,
     new_glicko2_state,
+    new_ufc5_state,
     new_unified_state,
 )
 from elo_calculator.application.ranking.system_g_goat_pipeline import compute_and_ingest_goat
+from elo_calculator.application.ranking.types import UFC5PerkKey, UFC5StatBucket, UFC5StatKey
 from elo_calculator.infrastructure.database import schema as db_schema
 from elo_calculator.infrastructure.database.engine import metadata
 
@@ -71,6 +77,7 @@ _SYSTEM_C_KEY = 'dynamic_factor_bt'
 _SYSTEM_D_KEY = 'stacked_logit_mixture'
 _SYSTEM_E_KEY = 'expected_win_rate_pool'
 _SYSTEM_F_KEY = 'unified_composite_elo'
+_SYSTEM_H_KEY = 'ufc5_stats'
 
 
 # ---------------------------------------------------------------------------
@@ -84,11 +91,14 @@ class _RatingRuntime:
     stacked_system: StackedLogitMixtureSystem
     ewr_system: ExpectedWinRatePoolSystem
     unified_system: UnifiedCompositeEloSystem
+    ufc5_system: UFC5StatsSystem
 
     elo_states: dict[Any, Any]
     glicko_states: dict[Any, Any]
     dynamic_states: dict[Any, Any]
     unified_states: dict[Any, Any]
+    ufc5_states: dict[Any, Any]
+    ufc5_percentile_pool: DivisionPercentilePool
 
     mma_fight_counts: dict[Any, int]
     mma_last_date: dict[Any, date]
@@ -96,6 +106,10 @@ class _RatingRuntime:
     delta_rows: list[dict]
     snapshot_map: dict[tuple[Any, Any, date], dict]
     stacked_samples: list[StackingSample]
+
+    ufc5_delta_rows: list[dict]
+    ufc5_snapshot_rows: list[dict]
+    ufc5_perk_rows: list[dict]
 
 
 # ---------------------------------------------------------------------------
@@ -143,7 +157,7 @@ def run_rankings(conn: Connection, *, truncate: bool = True) -> None:
 
     final_date = max((c.checkpoint_date for c in contexts), default=date(1900, 1, 1))
     logger.info('Running rating systems (final date = {}) …', final_date)
-    _run_all_systems(conn, contexts, bout_pairs, ps_artifacts, system_ids, final_date)
+    _run_all_systems(conn, contexts, bout_pairs, ps_artifacts, system_ids, final_date, round_stats, fight_totals)
 
     # --- System G: GOAT composite (post-hoc, reads Systems A-F outputs) ---
     logger.info('Computing System G (GOAT composite) …')
@@ -165,6 +179,9 @@ def _reset_computed_artifacts(conn: Connection) -> None:
         db_schema.fact_round_ps_table,
         db_schema.fact_rating_delta_table,
         db_schema.fact_rating_snapshot_table,
+        db_schema.fact_ufc5_stat_delta_table,
+        db_schema.fact_ufc5_perk_state_table,
+        db_schema.fact_ufc5_stat_snapshot_table,
         db_schema.dim_rating_system_table,
     ):
         conn.execute(delete(table))
@@ -214,6 +231,12 @@ def _upsert_rating_systems(conn: Connection) -> dict[str, Any]:
         {
             'system_key': _SYSTEM_F_KEY,
             'description': 'System F: Unified Composite Elo combining all signals.',
+            'param_json': {},
+            'code_version': SYSTEM_VERSION,
+        },
+        {
+            'system_key': _SYSTEM_H_KEY,
+            'description': 'System H: UFC 5 Progressive Stat Builder (22-stat, 12-perk, 3-layer overall).',
             'param_json': {},
             'code_version': SYSTEM_VERSION,
         },
@@ -280,6 +303,8 @@ def _run_all_systems(
     ps_artifacts: _PsArtifacts,
     system_ids: dict[str, Any],
     final_date: date,
+    round_stats: dict[Any, dict[int, dict[Any, FighterRoundStats]]],
+    fight_totals: dict[Any, dict[Any, FighterRoundStats]],
 ) -> None:
     runtime = _RatingRuntime(
         elo_system=EloPerformanceRatingSystem(),
@@ -288,15 +313,21 @@ def _run_all_systems(
         stacked_system=StackedLogitMixtureSystem(),
         ewr_system=ExpectedWinRatePoolSystem(),
         unified_system=UnifiedCompositeEloSystem(),
+        ufc5_system=UFC5StatsSystem(),
         elo_states={},
         glicko_states={},
         dynamic_states={},
         unified_states={},
+        ufc5_states={},
+        ufc5_percentile_pool=DivisionPercentilePool(),
         mma_fight_counts=defaultdict(int),
         mma_last_date={},
         delta_rows=[],
         snapshot_map={},
         stacked_samples=[],
+        ufc5_delta_rows=[],
+        ufc5_snapshot_rows=[],
+        ufc5_perk_rows=[],
     )
 
     ordered = _ordered_contexts(contexts, bout_pairs)
@@ -337,6 +368,9 @@ def _run_all_systems(
         # --- System F (all sports) ---
         _update_system_f(runtime, context, pair, evidence_a, system_ids)
 
+        # --- System H (all sports) ---
+        _update_system_h(runtime, context, pair, evidence_a, ps_artifacts, round_stats, fight_totals)
+
         # --- MMA fight tracking ---
         if context.sport_key == 'mma':
             runtime.mma_fight_counts[pair.fighter_a_id] += 1
@@ -356,6 +390,17 @@ def _run_all_systems(
     if runtime.snapshot_map:
         _bulk_insert(conn, db_schema.fact_rating_snapshot_table, list(runtime.snapshot_map.values()))
         logger.info('Wrote {} per-bout snapshot rows.', len(runtime.snapshot_map))
+
+    # --- System H: flush UFC5 deltas, snapshots, perk state ---
+    if runtime.ufc5_delta_rows:
+        _bulk_insert(conn, db_schema.fact_ufc5_stat_delta_table, runtime.ufc5_delta_rows)
+        logger.info('Wrote {} UFC5 stat delta rows.', len(runtime.ufc5_delta_rows))
+    if runtime.ufc5_snapshot_rows:
+        _bulk_insert(conn, db_schema.fact_ufc5_stat_snapshot_table, runtime.ufc5_snapshot_rows)
+        logger.info('Wrote {} UFC5 stat snapshot rows.', len(runtime.ufc5_snapshot_rows))
+    if runtime.ufc5_perk_rows:
+        _bulk_insert(conn, db_schema.fact_ufc5_perk_state_table, runtime.ufc5_perk_rows)
+        logger.info('Wrote {} UFC5 perk state rows.', len(runtime.ufc5_perk_rows))
 
     # --- Systems D & E (computed after all bouts) ---
     _compute_stacked_and_ewr(conn, runtime, system_ids, final_date)
@@ -529,6 +574,222 @@ def _update_system_f(
             'consistency': runtime.unified_system.finish_rate(post_b),
         },
     )
+
+
+def _update_system_h(
+    runtime: _RatingRuntime,
+    context: _BoutContext,
+    pair: _BoutPair,
+    evidence: BoutEvidence,
+    ps_artifacts: _PsArtifacts,
+    round_stats: dict[Any, dict[int, dict[Any, FighterRoundStats]]],
+    fight_totals: dict[Any, dict[Any, FighterRoundStats]],
+) -> None:
+    """Extract features, feed the percentile pool, run System H update."""
+    tier = ps_artifacts.tier_by_bout.get(context.bout_id, EvidenceTier.C)
+
+    # Build features for both fighters
+    features_a, features_b = _extract_h_features(context, pair, round_stats, fight_totals)
+
+    # Get/create states
+    h_a = runtime.ufc5_states.get(pair.fighter_a_id) or new_ufc5_state(str(pair.fighter_a_id))
+    h_b = runtime.ufc5_states.get(pair.fighter_b_id) or new_ufc5_state(str(pair.fighter_b_id))
+
+    div_id_str = str(context.division_id) if context.division_id else None
+
+    # Feed finished features into percentile pool (tier-A only, ≥5 fights)
+    if features_a is not None and tier == EvidenceTier.A:
+        runtime.ufc5_percentile_pool.add_fighter_features(div_id_str, features_a, h_a.tier_a_fight_count)
+    if features_b is not None and tier == EvidenceTier.A:
+        runtime.ufc5_percentile_pool.add_fighter_features(div_id_str, features_b, h_b.tier_a_fight_count)
+
+    # Run the system update
+    post_a, post_b, delta_a, delta_b = runtime.ufc5_system.update_bout(
+        h_a,
+        h_b,
+        evidence,
+        features_a,
+        features_b,
+        runtime.ufc5_percentile_pool,
+        division_id_a=div_id_str,
+        division_id_b=div_id_str,
+    )
+
+    runtime.ufc5_states[pair.fighter_a_id] = post_a
+    runtime.ufc5_states[pair.fighter_b_id] = post_b
+
+    # Queue delta rows
+    runtime.ufc5_delta_rows.extend(
+        [
+            _ufc5_delta_row(context.bout_id, pair.fighter_a_id, delta_a),
+            _ufc5_delta_row(context.bout_id, pair.fighter_b_id, delta_b),
+        ]
+    )
+
+    # Queue snapshot rows (one per fighter per date, latest wins)
+    for fid, state in [(pair.fighter_a_id, post_a), (pair.fighter_b_id, post_b)]:
+        _queue_ufc5_snapshot(runtime, fid, state, context.checkpoint_date)
+        _queue_ufc5_perk_rows(runtime, fid, state, context.checkpoint_date)
+
+
+def _extract_h_features(
+    context: _BoutContext,
+    pair: _BoutPair,
+    round_stats: dict[Any, dict[int, dict[Any, FighterRoundStats]]],
+    fight_totals: dict[Any, dict[Any, FighterRoundStats]],
+) -> tuple[Any, Any]:
+    """Try to build UFC5BoutFeatures for both fighters in a bout."""
+    bout_rounds = round_stats.get(context.bout_id, {})
+    bout_totals = fight_totals.get(context.bout_id, {})
+
+    fight_mins = _fight_minutes_from_context(context)
+
+    # Try round-level data first
+    if bout_rounds:
+        agg_a, agg_b, round_tuples = _aggregate_for_features(bout_rounds, pair)
+        if agg_a is not None and agg_b is not None:
+            tfs = fight_mins * 60.0
+            fa = extract_bout_features(agg_a, agg_b, fight_mins, round_stats_list=round_tuples, total_fight_seconds=tfs)
+            fb = extract_bout_features(
+                agg_b,
+                agg_a,
+                fight_mins,
+                round_stats_list=[(opp, fig, secs) for fig, opp, secs in round_tuples],
+                total_fight_seconds=tfs,
+            )
+            return fa, fb
+
+    # Fall back to fight totals
+    tot_a = bout_totals.get(pair.fighter_a_id)
+    tot_b = bout_totals.get(pair.fighter_b_id)
+    if tot_a is not None and tot_b is not None:
+        tfs = fight_mins * 60.0
+        fa = extract_bout_features(tot_a, tot_b, fight_mins, total_fight_seconds=tfs)
+        fb = extract_bout_features(tot_b, tot_a, fight_mins, total_fight_seconds=tfs)
+        return fa, fb
+
+    return None, None
+
+
+def _aggregate_for_features(
+    bout_rounds: dict[int, dict[Any, FighterRoundStats]], pair: _BoutPair
+) -> tuple[FighterRoundStats | None, FighterRoundStats | None, list[tuple[FighterRoundStats, FighterRoundStats, int]]]:
+    """Aggregate round-level stats into bout totals and per-round tuples."""
+    a_rounds: list[FighterRoundStats] = []
+    b_rounds: list[FighterRoundStats] = []
+    round_tuples: list[tuple[FighterRoundStats, FighterRoundStats, int]] = []
+
+    for rnd_num in sorted(bout_rounds):
+        rnd = bout_rounds[rnd_num]
+        a_stats = rnd.get(pair.fighter_a_id)
+        b_stats = rnd.get(pair.fighter_b_id)
+        if a_stats is None or b_stats is None:
+            continue
+        a_rounds.append(a_stats)
+        b_rounds.append(b_stats)
+        round_tuples.append((a_stats, b_stats, 300))  # 5-minute rounds
+
+    if not a_rounds:
+        return None, None, []
+
+    agg_a = aggregate_round_stats(a_rounds)
+    agg_b = aggregate_round_stats(b_rounds)
+    return agg_a, agg_b, round_tuples
+
+
+def _fight_minutes_from_context(context: _BoutContext) -> float:
+    """Estimate fight duration in minutes from context metadata."""
+    if context.finish_round is not None and context.finish_time_seconds is not None:
+        completed_rounds = max(context.finish_round - 1, 0)
+        return completed_rounds * 5.0 + context.finish_time_seconds / 60.0
+
+    if context.finish_round is not None:
+        return context.finish_round * 5.0
+
+    return context.scheduled_rounds * 5.0
+
+
+def _ufc5_delta_row(bout_id: Any, fighter_id: Any, delta: Any) -> dict:
+    return {
+        'bout_id': bout_id,
+        'fighter_id': fighter_id,
+        'pre_overall': round(delta.pre_overall, 2),
+        'post_overall': round(delta.post_overall, 2),
+        'delta_overall': round(delta.delta_overall, 3),
+        'tier_used': delta.tier_used.value,
+        'stat_deltas_json': delta.stat_deltas,
+        'perk_deltas_json': delta.perk_deltas,
+    }
+
+
+def _queue_ufc5_snapshot(runtime: _RatingRuntime, fighter_id: Any, state: Any, as_of_date: date) -> None:
+    """Build and queue a UFC5 snapshot row (overwrites same fighter+date)."""
+    system = runtime.ufc5_system
+    buckets = system.compute_bucket_scores(state)
+
+    row = {
+        'fighter_id': fighter_id,
+        'as_of_date': as_of_date,
+        'accuracy': round(state.stats.get(UFC5StatKey.ACCURACY, 85.0), 2),
+        'blocking': round(state.stats.get(UFC5StatKey.BLOCKING, 85.0), 2),
+        'footwork': round(state.stats.get(UFC5StatKey.FOOTWORK, 85.0), 2),
+        'head_movement': round(state.stats.get(UFC5StatKey.HEAD_MOVEMENT, 85.0), 2),
+        'kick_power': round(state.stats.get(UFC5StatKey.KICK_POWER, 85.0), 2),
+        'kick_speed': round(state.stats.get(UFC5StatKey.KICK_SPEED, 85.0), 2),
+        'punch_power': round(state.stats.get(UFC5StatKey.PUNCH_POWER, 85.0), 2),
+        'punch_speed': round(state.stats.get(UFC5StatKey.PUNCH_SPEED, 85.0), 2),
+        'takedown_defence': round(state.stats.get(UFC5StatKey.TAKEDOWN_DEFENCE, 85.0), 2),
+        'bottom_game': round(state.stats.get(UFC5StatKey.BOTTOM_GAME, 85.0), 2),
+        'clinch_grapple': round(state.stats.get(UFC5StatKey.CLINCH_GRAPPLE, 85.0), 2),
+        'clinch_striking': round(state.stats.get(UFC5StatKey.CLINCH_STRIKING, 85.0), 2),
+        'ground_striking': round(state.stats.get(UFC5StatKey.GROUND_STRIKING, 85.0), 2),
+        'submission_defence': round(state.stats.get(UFC5StatKey.SUBMISSION_DEFENCE, 85.0), 2),
+        'submission_offence': round(state.stats.get(UFC5StatKey.SUBMISSION_OFFENCE, 85.0), 2),
+        'takedowns': round(state.stats.get(UFC5StatKey.TAKEDOWNS, 85.0), 2),
+        'top_game': round(state.stats.get(UFC5StatKey.TOP_GAME, 85.0), 2),
+        'body_strength': round(state.stats.get(UFC5StatKey.BODY_STRENGTH, 85.0), 2),
+        'cardio': round(state.stats.get(UFC5StatKey.CARDIO, 85.0), 2),
+        'chin_strength': round(state.stats.get(UFC5StatKey.CHIN_STRENGTH, 85.0), 2),
+        'legs_strength': round(state.stats.get(UFC5StatKey.LEGS_STRENGTH, 85.0), 2),
+        'recovery': round(state.stats.get(UFC5StatKey.RECOVERY, 85.0), 2),
+        'standup_overall': round(buckets.get(UFC5StatBucket.STANDUP, 85.0), 2),
+        'grappling_overall': round(buckets.get(UFC5StatBucket.GRAPPLING, 85.0), 2),
+        'health_overall': round(buckets.get(UFC5StatBucket.HEALTH, 85.0), 2),
+        'base_overall': round(system.compute_base_overall(state), 2),
+        'synergy_bonus': round(system.compute_synergy_bonus(state), 3),
+        'perk_bonus': round(system.compute_perk_bonus(state), 3),
+        'effective_overall': round(system.compute_effective_overall(state), 2),
+        'mma_fight_count': state.mma_fight_count,
+        'tier_a_fight_count': state.tier_a_fight_count,
+        'total_fights': state.total_fights,
+        'division_id': state.division_id,
+    }
+    # Replace any existing snapshot for same fighter+date
+    runtime.ufc5_snapshot_rows = [
+        r for r in runtime.ufc5_snapshot_rows if not (r['fighter_id'] == fighter_id and r['as_of_date'] == as_of_date)
+    ]
+    runtime.ufc5_snapshot_rows.append(row)
+
+
+def _queue_ufc5_perk_rows(runtime: _RatingRuntime, fighter_id: Any, state: Any, as_of_date: date) -> None:
+    """Queue perk state rows for a fighter."""
+    # Remove existing rows for same fighter+date
+    runtime.ufc5_perk_rows = [
+        r for r in runtime.ufc5_perk_rows if not (r['fighter_id'] == fighter_id and r['as_of_date'] == as_of_date)
+    ]
+
+    for perk_key in UFC5PerkKey:
+        runtime.ufc5_perk_rows.append(
+            {
+                'fighter_id': fighter_id,
+                'as_of_date': as_of_date,
+                'perk_key': perk_key.value,
+                'perk_score': round(state.perk_scores.get(perk_key, 80.0), 4),
+                'is_active': state.perk_active.get(perk_key, False),
+                'consecutive_above': state.perk_consecutive_above.get(perk_key, 0),
+                'consecutive_below': state.perk_consecutive_below.get(perk_key, 0),
+            }
+        )
 
 
 def _append_stacking_sample(
@@ -782,6 +1043,32 @@ def _write_final_snapshots(
 
     _bulk_insert(conn, db_schema.fact_rating_snapshot_table, rows)
     logger.info('Wrote {} final "as-of" snapshots for A/B/C/F at {}.', len(rows), final_date)
+
+    # System H — UFC5 Stats (final snapshots for all fighters at final_date)
+    existing_h_fighters = {r['fighter_id'] for r in runtime.ufc5_snapshot_rows if r['as_of_date'] == final_date}
+    for fid, state in runtime.ufc5_states.items():
+        if fid in existing_h_fighters:
+            continue
+        _queue_ufc5_snapshot(runtime, fid, state, final_date)
+        _queue_ufc5_perk_rows(runtime, fid, state, final_date)
+
+    # Flush any remaining final-date H snapshots/perks
+    new_h_snap = [
+        r
+        for r in runtime.ufc5_snapshot_rows
+        if r['as_of_date'] == final_date and r['fighter_id'] not in existing_h_fighters
+    ]
+    new_h_perk = [
+        r
+        for r in runtime.ufc5_perk_rows
+        if r['as_of_date'] == final_date and r['fighter_id'] not in existing_h_fighters
+    ]
+    if new_h_snap:
+        _bulk_insert(conn, db_schema.fact_ufc5_stat_snapshot_table, new_h_snap)
+        logger.info('Wrote {} final System H snapshot rows at {}.', len(new_h_snap), final_date)
+    if new_h_perk:
+        _bulk_insert(conn, db_schema.fact_ufc5_perk_state_table, new_h_perk)
+        logger.info('Wrote {} final System H perk state rows at {}.', len(new_h_perk), final_date)
 
 
 # ---------------------------------------------------------------------------
